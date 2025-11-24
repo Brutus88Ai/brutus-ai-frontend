@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig(({mode}) => ({
+  base: process.env.BASE_PATH || '/',
   plugins: [react()],
   define: {
     __firebase_config: JSON.stringify(process.env.VITE_FIREBASE_CONFIG || '{}'),
