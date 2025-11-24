@@ -1,19 +1,5 @@
-{
-  "version": 2,
-  "builds": [
-    { "src": "package.json", "use": "@vercel/static-build" }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ]
-}
-{
-  "version": 2,
-  "builds": [
-    { "src": "package.json", "use": "@vercel/static-build" }
-  ],
-  "routes": [
-    { "src": "/(.*)", "dest": "/index.html" }
-  ]
+﻿{
+  "buildCommand": "cd src && npm install && npm run build",
+  "outputDirectory": "src/dist",
+  "installCommand": "npm install --prefix src"
 }
