@@ -3,18 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cd src && vite",
-    "build": "cd src && npm.cmd run build",
-    "preview": "cd src && vite preview --port 4173"
-  },
-  "dependencies": {
-    "firebase": "^9.22.0",
-    "lucide-react": "^0.276.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.0.0",
-    "vite": "^5.0.0"
+    "dev": "cd src && npm run dev",
+    "build": "cd src && npm install && npm run build && mv src/dist dist",
+    "preview": "cd src && npm run preview"
   }
 }
