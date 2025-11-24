@@ -19,21 +19,60 @@ const firebaseConfig = {
 */
 
 // AKTIV (Für Editor):
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+let firebaseConfig = {};
+let firebaseInitError = null;
+try {
+    const serializedConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+    firebaseConfig = JSON.parse(serializedConfig);
+} catch (error) {
+    firebaseInitError = error;
+    console.error('Firebase-Konfiguration konnte nicht geparst werden.', error);
+    firebaseConfig = {};
+}
+
+let app = null;
+let auth = null;
+let db = null;
+try {
+    if (firebaseConfig && typeof firebaseConfig === 'object' && firebaseConfig.projectId) {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+    } else {
+        firebaseInitError = firebaseInitError || new Error('Firebase-Konfiguration unvollständig. Bitte VITE_FIREBASE_CONFIG prüfen.');
+        console.error('Firebase-Konfiguration unvollständig. Bitte VITE_FIREBASE_CONFIG prüfen.');
+    }
+} catch (error) {
+    firebaseInitError = error;
+    console.error('Firebase-Initialisierung fehlgeschlagen.', error);
+    app = null;
+    auth = null;
+    db = null;
+}
 
 // WICHTIG: App-ID säubern & Fallback, um Pfad-Fehler zu verhindern
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 const appId = rawAppId ? rawAppId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'fallback-id';
 
-const apiKey = ""; 
-
 // Hilfsfunktion für Umgebungsvariablen (Safe Mode)
 const getEnv = (key) => {
-  try { return ''; } catch (e) { return ''; }
+    try {
+        if (typeof import.meta !== 'undefined' && import.meta.env && typeof import.meta.env[key] !== 'undefined') {
+            return import.meta.env[key];
+        }
+        if (typeof window !== 'undefined' && window.__env && typeof window.__env[key] !== 'undefined') {
+            return window.__env[key];
+        }
+        if (typeof process !== 'undefined' && process.env && typeof process.env[key] !== 'undefined') {
+            return process.env[key];
+        }
+    } catch (error) {
+        console.warn(`Env lookup für ${key} fehlgeschlagen`, error);
+    }
+    return '';
 };
+
+const apiKey = getEnv('VITE_GEMINI_API_KEY') || '';
 
 // --- HELPER FUNCTIONS ---
 
@@ -70,6 +109,10 @@ const useAuth = () => {
     const [isAuthReady, setIsAuthReady] = useState(false);
 
     useEffect(() => {
+        if (!auth) {
+            setIsAuthReady(true);
+            return () => {};
+        }
         const initAuth = async () => {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                 try { await signInWithCustomToken(auth, __initial_auth_token); } 
@@ -89,7 +132,7 @@ const useFirestore = (userId, appId) => {
     const [isProSubscriber, setIsProSubscriber] = useState(false);
 
     useEffect(() => {
-        if (!userId || !appId) return;
+        if (!db || !userId || !appId) return;
 
         // Fehler-abfangende Listener
         try {
@@ -234,6 +277,25 @@ const App = () => {
     const [selectedPromptForAction, setSelectedPromptForAction] = useState(null);
     const [generatingState, setGeneratingState] = useState({});
 
+    if (firebaseInitError) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-950 text-red-200 text-center px-6">
+                <h1 className="text-2xl font-black mb-3">Firebase-Initialisierung fehlgeschlagen</h1>
+                <p className="max-w-md text-sm opacity-80">{String(firebaseInitError.message || firebaseInitError)}</p>
+                <p className="mt-4 text-xs text-red-300">Bitte prüfen Sie die build-time Variable VITE_FIREBASE_CONFIG im Vercel Dashboard.</p>
+            </div>
+        );
+    }
+
+    if (!app || !auth || !db) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-950 text-red-200 text-center px-6">
+                <h1 className="text-2xl font-black mb-3">Firebase-Konfiguration fehlt</h1>
+                <p className="max-w-md text-sm opacity-80">Die App konnte keine Verbindung zu Firebase herstellen. Bitte setzen Sie VITE_FIREBASE_CONFIG, VITE_APP_ID und starten Sie das Deployment neu.</p>
+            </div>
+        );
+    }
+
     const showToast = useCallback((msg, type='success') => { setToast({message: String(msg), type}); setTimeout(() => setToast(null), 4000); }, []);
     const getActiveApiKey = () => userApiKey || apiKey || getEnv('VITE_GEMINI_API_KEY');
 
@@ -241,7 +303,11 @@ const App = () => {
         const file = e.target.files[0];
         if (file) {
             const url = URL.createObjectURL(file);
-            index === 'custom' ? setCustomImage(url) : null;
+            if (index === 'custom') {
+                setCustomImage(url);
+            } else {
+                setGeneratedImages(prev => ({ ...prev, [index]: url }));
+            }
         }
     };
 
@@ -249,7 +315,18 @@ const App = () => {
         setGeneratingState(prev => ({...prev, type: 'text'}));
         const fallbackData = [{ trend: "AI Revolution", prompt: "A futuristic city with flying cars and neon lights, cinematic 4k" }];
         try {
-            const res = await fetch(getGeminiUrl(getActiveApiKey()), {
+            const activeKey = userApiKey || apiKey || getEnv('VITE_GEMINI_API_KEY');
+            if (!activeKey) {
+                if (db && userId) {
+                    await setDoc(doc(db, `artifacts/${appId}/users/${userId}/prompts`, `batch_${Date.now()}`), { prompts: fallbackData, timestamp: new Date().toISOString(), source: 'fallback-no-api-key' });
+                }
+                setGeneratedImages({});
+                showToast("Kein API-Key – Standardideen genutzt", "error");
+                setGeneratingState(prev => ({ ...prev, type: null }));
+                return;
+            }
+
+            const res = await fetch(getGeminiUrl(activeKey), {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ contents: [{ parts: [{ text: `Analysiere Trend "${inputTopic || 'Viral'}". Erstelle 4 TikTok/Shorts Konzepte. JSON: [{"trend": "Titel", "prompt": "Visual description"}]` }] }] })
             });
@@ -259,26 +336,46 @@ const App = () => {
             setGeneratedImages({}); showToast("Konzepte erstellt!", "success");
         } catch (e) { console.error(e); showToast("Fehler oder Offline", 'error'); }
         setGeneratingState(prev => ({...prev, type: null}));
-    }, [userId, userApiKey, showToast]);
+    }, [userId, userApiKey, showToast, db, appId]);
 
     // OPTIMIZED IMAGE GENERATION WITH TIMEOUT
     const generateImage = useCallback(async (prompt, index) => {
-        setGeneratingState(p => ({...p, index: index, type: 'image'}));
+        setGeneratingState(p => ({ ...p, index, type: 'image' }));
+        let success = false;
         try {
-            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt.substring(0, 250))}?width=1080&height=1920&nologo=true&seed=${Math.floor(Math.random()*9999)}`;
-            
+            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent((prompt || '').substring(0, 250))}?width=1080&height=1920&nologo=true&seed=${Math.floor(Math.random() * 9999)}`;
+
             await new Promise((resolve, reject) => {
                 const img = new Image();
-                const timeout = setTimeout(() => { img.src = ""; reject(new Error("Timeout")); }, 15000); // 15s Timeout
-                img.onload = () => { clearTimeout(timeout); resolve(); };
-                img.onerror = () => { clearTimeout(timeout); reject(new Error("Load Error")); };
+                const timeout = setTimeout(() => {
+                    img.src = '';
+                    reject(new Error('Timeout'));
+                }, 15000); // 15s Timeout
+                img.onload = () => {
+                    clearTimeout(timeout);
+                    resolve();
+                };
+                img.onerror = () => {
+                    clearTimeout(timeout);
+                    reject(new Error('Load Error'));
+                };
                 img.src = url;
             });
 
-            index === 'custom' ? setCustomImage(url) : setGeneratedImages(p => ({...p, [index]: url})); 
-            showToast("Bild erstellt!", "success");
-        } catch(e) { showToast("Bildfehler / Timeout", 'error'); }
-        setGeneratingState(p => ({...p, index: null, type: null}));
+            if (index === 'custom') {
+                setCustomImage(url);
+            } else {
+                setGeneratedImages(p => ({ ...p, [index]: url }));
+            }
+            showToast('Bild erstellt!', 'success');
+            success = true;
+        } catch (e) {
+            console.error('Bildgenerierung fehlgeschlagen', e);
+            showToast('Bildfehler / Timeout', 'error');
+        } finally {
+            setGeneratingState(p => ({ ...p, index: null, type: null }));
+        }
+        return success;
     }, [showToast]);
 
     const saveUpload = async (platformString, status = 'DRAFT') => {
@@ -318,27 +415,86 @@ const App = () => {
 
     // Auto-Pilot
     useEffect(() => {
-        if (!autoPilotMode || !db || !userId) { if (!autoPilotMode) setAutoPilotState('idle'); return; }
-        const step = async () => {
-            if (promptsData.length > 0 && autoPilotState === 'idle') {
-                const target = promptsData[0];
-                if (!generatedImages[0]) { 
-                    setAutoPilotState('gen'); 
-                    await generateImage(target.prompt, 0); 
-                    setAutoPilotState('ready'); 
+        if (!autoPilotMode || !db || !userId) {
+            if (!autoPilotMode && autoPilotState !== 'idle') {
+                setAutoPilotState('idle');
+            }
+            return;
+        }
+
+        if (!promptsData.length) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const runAutoPilot = async () => {
+            if (autoPilotState === 'generating' || autoPilotState === 'publishing') {
+                return;
+            }
+
+            const target = promptsData[0];
+
+            if (autoPilotState === 'idle') {
+                if (!generatedImages[0]) {
+                    setAutoPilotState('generating');
+                    const success = await generateImage(target?.prompt, 0);
+                    if (cancelled) {
+                        return;
+                    }
+                    setAutoPilotState(success ? 'ready' : 'idle');
+                    return;
                 }
-                else if (autoPilotState === 'ready') {
-                    setAutoPilotState('up');
-                    await triggerAutomation({ prompt: target.prompt, imageUrl: generatedImages[0], platform: "TIKTOK" });
+                setAutoPilotState('ready');
+                return;
+            }
+
+            if (autoPilotState === 'ready') {
+                setAutoPilotState('publishing');
+                try {
+                    const automationOk = await triggerAutomation({ prompt: target?.prompt, imageUrl: generatedImages[0], platform: 'TIKTOK' });
+                    if (!automationOk) {
+                        throw new Error('Automation webhook failed');
+                    }
                     await addDoc(collection(db, `artifacts/${appId}/users/${userId}/uploads`), {
-                        prompt: target.prompt, imageUrl: generatedImages[0], platform: "TIKTOK", status: 'AUTO_PUBLISH', uploadDate: serverTimestamp()
+                        prompt: target?.prompt,
+                        imageUrl: generatedImages[0],
+                        platform: 'TIKTOK',
+                        status: 'AUTO_PUBLISH',
+                        uploadDate: serverTimestamp()
                     });
-                    showToast("Published!", 'success'); setAutoPilotMode(false); setAutoPilotState('idle');
+                    if (!cancelled) {
+                        showToast('Published!', 'success');
+                        setAutoPilotMode(false);
+                        setAutoPilotState('idle');
+                    }
+                } catch (error) {
+                    console.error('Auto-Pilot publish failed', error);
+                    if (!cancelled) {
+                        showToast('Auto-Pilot fehlgeschlagen', 'error');
+                        setAutoPilotMode(false);
+                        setAutoPilotState('idle');
+                    }
                 }
             }
         };
-        const t = setTimeout(step, 2000); return () => clearTimeout(t);
-    }, [autoPilotMode, promptsData, generatedImages, autoPilotState, db, userId, generateImage, showToast]);
+
+        const timer = setTimeout(() => {
+            runAutoPilot().catch((error) => {
+                console.error('Auto-Pilot unexpected error', error);
+                if (!cancelled) {
+                    showToast('Auto-Pilot Fehlfunktion', 'error');
+                    setAutoPilotMode(false);
+                    setAutoPilotState('idle');
+                }
+            });
+        }, 1000);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [autoPilotMode, promptsData, generatedImages, autoPilotState, db, userId, generateImage, showToast, triggerAutomation]);
 
     // VIDEO GENERATION: generische Methode, die entweder einen realen Video-API-Endpunkt benutzt (VITE_VIDEO_API_URL)
     // oder simuliert, falls keine URL gesetzt ist. Gibt { success, url } zurück.
