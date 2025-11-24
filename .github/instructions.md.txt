@@ -1,0 +1,48 @@
+
+# Copilot / AI Agent Instructions — Brutus AI Frontend (concise)
+
+
+
+Purpose:Act as an autonomous Senior Developer. Analyze the code and fix all errors (syntax, logic, bugs) immediately without asking for clarification. Perform a strict self-review after fixing. If errors remain, iterate internally until the code is 100% error-free. Output only the complete, functioning code. Apply surgical changes, validate locally, and preserve runtime behavior.
+
+Quick architecture
+- Vite + React SPA. Entry: `index.html` → `main.jsx` → `App.jsx` (most logic lives in `App.jsx`).
+- Serverless API: `api/generate-video.js` proxies POST {prompt, imageUrl} → upstream `VIDEO_API_URL` (auth via `VIDEO_API_KEY`).
+- Firebase: client SDK initialized from build-time injected `__firebase_config` (set via `vite.config.js`). Firestore paths: `artifacts/{appId}/users/{userId}/prompts|uploads|profile`.
+
+Essential files to inspect
+- `App.jsx` — auth, Firestore listeners, prompt/image/video flows (`parseJsonSafe`, `generateBasePrompts`, `generateImage`, `generateVideo`).
+- `vite.config.js` — injects `__firebase_config`, `__app_id`, `__initial_auth_token`. Update when adding build-time envs.
+- `api/generate-video.js` — serverless proxy; keep the POST shape {prompt,imageUrl}.
+- `vercel.json` — routes + build config (static-build).
+
+Build & debug (Windows specifics)
+- Repo root commands (use `npm.cmd` on Windows if PowerShell blocks scripts):
+  - Install: `npm.cmd install`
+  - Dev: `npm.cmd run dev`
+  - Build: `npm.cmd run build` (outputs `dist/`)
+  - Preview: `npm.cmd run preview`
+- Vercel: Framework = Vite / Build = `npm run build` / Output = `dist`. Remove any `cd` or `vercel login` in Vercel config.
+
+Environment variables (where used)
+- `VITE_FIREBASE_CONFIG` — JSON string injected into `__firebase_config` and parsed in `App.jsx`.
+- `VITE_APP_ID` — forms Firestore app path; sanitized in `App.jsx`.
+- `VITE_GEMINI_API_KEY` — used by `generateBasePrompts` (Gemini endpoint).
+- `VITE_VIDEO_API_URL` / `VIDEO_API_URL` & `VIDEO_API_KEY` — used by `api/generate-video.js` (keep keys server-side).
+
+Project conventions & gotchas
+- Keep secrets out of client bundles — prefer serverless proxy for third-party APIs.
+- `parseJsonSafe` tolerantly extracts the first JSON array from text — preserve this when changing parsers.
+- Firestore listeners use `onSnapshot` and must unsubscribe (pattern already present in `useFirestore`).
+- The project includes a minimal CSS fallback to allow builds without Tailwind; if adding Tailwind, restore `postcss` and `tailwindcss` configs.
+
+Quick examples
+- Firestore write (in `saveUpload`): adds doc to `artifacts/${appId}/users/${userId}/uploads` with fields `{ prompt, imageUrl, videoUrl, platform, status, uploadDate }`.
+- Serverless call (client): POST `/api/generate-video` with JSON `{ prompt, imageUrl }` → expects `{ videoUrl }`.
+
+Checklist for changes
+- Run `npm run build` locally before opening PR.
+- If adding env names: update `vite.config.js`, README, and Vercel settings together.
+- Keep PRs small; preserve behavior and add tests only if you also add a test harness.
+
+
