@@ -51,6 +51,7 @@ export default function App() {
   const [drafts, setDrafts] = useState([]);
   const [published, setPublished] = useState([]);
   const [userProfile, setUserProfile] = useState({ tier: 'free', videosProduced: 0, creditsRemaining: 10 });
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   
   const autoPilotInterval = useRef(null);
 
@@ -338,8 +339,20 @@ export default function App() {
         )}
         {activeTab === 'planner' && <ContentPlannerTab drafts={drafts} deleteDraft={deleteDraft} produceVideo={produceVideo} />}
         {activeTab === 'tracking' && <TrackingTab published={published} />}
-        {activeTab === 'profile' && <ProfileTab userProfile={userProfile} />}
+        {activeTab === 'profile' && <ProfileTab userProfile={userProfile} onUpgrade={() => setShowPaymentModal(true)} />}
       </main>
+
+      {showPaymentModal && <GooglePayModal onClose={() => setShowPaymentModal(false)} user={user} onSuccess={async () => {
+        setUserProfile(prev => ({ ...prev, tier: 'pro', creditsRemaining: 999999 }));
+        if (user && db) {
+          await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/profile`, 'data'), {
+            tier: 'pro',
+            creditsRemaining: 999999
+          }, { merge: true });
+        }
+        setShowPaymentModal(false);
+        alert('Welcome to PRO! You now have unlimited credits.');
+      }} />}
     </div>
   );
 }
@@ -489,7 +502,7 @@ function TrackingTab({ published }) {
   );
 }
 
-function ProfileTab({ userProfile }) {
+function ProfileTab({ userProfile, onUpgrade }) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">Profile</h2>
@@ -510,7 +523,9 @@ function ProfileTab({ userProfile }) {
                 <p className="text-gray-400">Free Tier</p>
                 <p className="text-2xl font-bold text-purple-400">{userProfile.creditsRemaining} credits</p>
               </div>
-              <button className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-lg font-bold hover:scale-105 transition">Upgrade to PRO</button>
+              <button onClick={onUpgrade} className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-lg font-bold hover:scale-105 transition flex items-center justify-center gap-2">
+                <Crown size={20} />Upgrade to PRO - 9,99€/month
+              </button>
             </div>
           )}
         </div>
@@ -522,6 +537,170 @@ function ProfileTab({ userProfile }) {
             <div className="flex justify-between"><span className="text-gray-400">Total Likes</span><span className="font-bold text-purple-400">0</span></div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function GooglePayModal({ onClose, user, onSuccess }) {
+  const [processing, setProcessing] = useState(false);
+  const [paymentReady, setPaymentReady] = useState(false);
+
+  useEffect(() => {
+    // Load Google Pay API
+    const script = document.createElement('script');
+    script.src = 'https://pay.google.com/gp/p/js/pay.js';
+    script.async = true;
+    script.onload = () => {
+      initGooglePay();
+    };
+    document.body.appendChild(script);
+    
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  const initGooglePay = () => {
+    if (typeof google === 'undefined' || !google.payments) return;
+
+    const paymentsClient = new google.payments.api.PaymentsClient({
+      environment: 'TEST' // Change to 'PRODUCTION' for live
+    });
+
+    const isReadyToPayRequest = {
+      apiVersion: 2,
+      apiVersionMinor: 0,
+      allowedPaymentMethods: [{
+        type: 'CARD',
+        parameters: {
+          allowedAuthMethods: ['PAN_ONLY', 'CRYPTOGRAM_3DS'],
+          allowedCardNetworks: ['MASTERCARD', 'VISA']
+        }
+      }]
+    };
+
+    paymentsClient.isReadyToPay(isReadyToPayRequest)
+      .then(response => {
+        if (response.result) {
+          setPaymentReady(true);
+        }
+      })
+      .catch(err => console.error('Google Pay init error:', err));
+  };
+
+  const handleGooglePay = async () => {
+    if (typeof google === 'undefined' || !google.payments) {
+      alert('Google Pay not available');
+      return;
+    }
+
+    setProcessing(true);
+
+    const paymentsClient = new google.payments.api.PaymentsClient({
+      environment: 'TEST'
+    });
+
+    const paymentDataRequest = {
+      apiVersion: 2,
+      apiVersionMinor: 0,
+      allowedPaymentMethods: [{
+        type: 'CARD',
+        parameters: {
+          allowedAuthMethods: ['PAN_ONLY', 'CRYPTOGRAM_3DS'],
+          allowedCardNetworks: ['MASTERCARD', 'VISA']
+        },
+        tokenizationSpecification: {
+          type: 'PAYMENT_GATEWAY',
+          parameters: {
+            gateway: 'example',
+            gatewayMerchantId: 'exampleMerchantId'
+          }
+        }
+      }],
+      merchantInfo: {
+        merchantName: 'BrutusAI Pilot',
+        merchantId: '12345678901234567890'
+      },
+      transactionInfo: {
+        totalPriceStatus: 'FINAL',
+        totalPrice: '9.99',
+        currencyCode: 'EUR',
+        countryCode: 'DE'
+      }
+    };
+
+    try {
+      const paymentData = await paymentsClient.loadPaymentData(paymentDataRequest);
+      console.log('Payment successful:', paymentData);
+      
+      // In production, send paymentData to your backend for verification
+      await onSuccess();
+    } catch (err) {
+      console.error('Payment failed:', err);
+      setProcessing(false);
+      if (err.statusCode !== 'CANCELED') {
+        alert('Payment failed. Please try again.');
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-8 max-w-md w-full border border-purple-500/30 relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white">
+          <XCircle size={24} />
+        </button>
+
+        <div className="text-center mb-6">
+          <Crown className="text-yellow-400 mx-auto mb-4" size={64} />
+          <h2 className="text-3xl font-bold mb-2">Upgrade to PRO</h2>
+          <p className="text-gray-400">Unlock unlimited video production</p>
+        </div>
+
+        <div className="bg-black/40 rounded-xl p-6 mb-6 border border-purple-500/30">
+          <div className="flex justify-between items-center mb-4">
+            <span className="text-lg">PRO Subscription</span>
+            <span className="text-2xl font-bold text-purple-400">9,99€</span>
+          </div>
+          <div className="text-sm text-gray-400 space-y-2">
+            <div className="flex items-center gap-2"><CheckCircle size={16} className="text-green-400" />Unlimited credits</div>
+            <div className="flex items-center gap-2"><CheckCircle size={16} className="text-green-400" />Unlimited video production</div>
+            <div className="flex items-center gap-2"><CheckCircle size={16} className="text-green-400" />Priority support</div>
+            <div className="flex items-center gap-2"><CheckCircle size={16} className="text-green-400" />Early access to new features</div>
+          </div>
+        </div>
+
+        {paymentReady ? (
+          <button 
+            onClick={handleGooglePay}
+            disabled={processing}
+            className="w-full bg-white text-black font-bold py-4 rounded-xl hover:bg-gray-100 transition flex items-center justify-center gap-3 disabled:opacity-50"
+          >
+            {processing ? (
+              <Loader className="animate-spin" size={20} />
+            ) : (
+              <>
+                <svg viewBox="0 0 50 20" className="h-5">
+                  <path fill="#4285F4" d="M19.7 10c0-.6-.1-1.2-.2-1.8H10v3.4h5.4c-.2 1.2-1 2.2-2.1 2.9v2.2h3.4c2-1.8 3-4.5 3-6.7z"/>
+                  <path fill="#34A853" d="M10 20c2.8 0 5.1-1 6.8-2.6l-3.4-2.6c-1 .6-2.2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H.8v2.7C2.5 18 6 20 10 20z"/>
+                  <path fill="#FBBC04" d="M4.4 12.1c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V5.4H.8C.3 6.4 0 7.7 0 9s.3 2.6.8 3.7l3.6-2.6z"/>
+                  <path fill="#EA4335" d="M10 4c1.5 0 2.8.5 3.9 1.5l2.9-2.9C15.1 1 12.8 0 10 0 6 0 2.5 2 .8 5.4l3.6 2.7C5.2 5.8 7.4 4 10 4z"/>
+                </svg>
+                Pay with Google Pay
+              </>
+            )}
+          </button>
+        ) : (
+          <div className="text-center py-4 text-gray-400">
+            <Loader className="animate-spin mx-auto mb-2" size={24} />
+            Loading Google Pay...
+          </div>
+        )}
+
+        <p className="text-xs text-gray-500 text-center mt-4">
+          Secure payment powered by Google Pay. Cancel anytime.
+        </p>
       </div>
     </div>
   );
