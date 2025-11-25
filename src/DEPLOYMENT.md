@@ -96,7 +96,7 @@ systemctl status nginx
 ### Certbot manuell
 ```bash
 certbot --nginx -d brutus-ai.de -d www.brutus-ai.de
-# E-Mail: pascalhares@gmail.com
+# E-Mail: brutusaiswebapp@gmail.com
 # Redirect: Yes
 ```
 

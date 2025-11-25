@@ -66,7 +66,7 @@ fi
 # 6. Certbot ausführen
 echo ""
 echo "→ Richte SSL-Zertifikat ein..."
-certbot --nginx -d brutus-ai.de -d www.brutus-ai.de --non-interactive --agree-tos --email pascalhares@gmail.com --redirect
+certbot --nginx -d brutus-ai.de -d www.brutus-ai.de --non-interactive --agree-tos --email brutusaiswebapp@gmail.com --redirect
 
 # 7. Update-Skript erstellen
 echo ""
