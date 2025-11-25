@@ -4,22 +4,42 @@ export default async function handler(req, res) {
     const { prompt, imageUrl } = req.body || {};
     if (!prompt || !imageUrl) return res.status(400).json({ error: 'Missing prompt or imageUrl' });
 
-    const VIDEO_API_URL = process.env.VIDEO_API_URL || process.env.VITE_VIDEO_API_URL;
-    const VIDEO_API_KEY = process.env.VIDEO_API_KEY || process.env.VITE_VIDEO_API_KEY;
-    if (!VIDEO_API_URL) return res.status(500).json({ error: 'Video API not configured' });
+    // Use Hugging Face Spaces Ovi API
+    const HF_TOKEN = process.env.HF_TOKEN || process.env.VITE_HF_TOKEN;
+    const API_URL = 'https://akhaliq-ovi.hf.space/api/predict';
 
-    const payload = { prompt, imageUrl };
+    const payload = {
+      data: [
+        imageUrl,  // input image
+        prompt,    // motion description
+        42,        // seed
+        5,         // num_inference_steps
+        6.0        // guidance_scale
+      ]
+    };
+
     const headers = { 'Content-Type': 'application/json' };
-    if (VIDEO_API_KEY) headers['Authorization'] = `Bearer ${VIDEO_API_KEY}`;
+    if (HF_TOKEN) headers['Authorization'] = `Bearer ${HF_TOKEN}`;
 
-    const resp = await fetch(VIDEO_API_URL, { method: 'POST', headers, body: JSON.stringify(payload) });
+    const resp = await fetch(API_URL, { 
+      method: 'POST', 
+      headers, 
+      body: JSON.stringify(payload) 
+    });
+
     if (!resp.ok) {
       const text = await resp.text();
-      return res.status(502).json({ error: 'Upstream video API error', status: resp.status, body: text });
+      return res.status(502).json({ error: 'Hugging Face API error', status: resp.status, body: text });
     }
+
     const data = await resp.json();
-    if (data?.videoUrl) return res.status(200).json({ videoUrl: data.videoUrl });
-    return res.status(502).json({ error: 'No videoUrl returned by upstream', body: data });
+    
+    // Hugging Face returns: { data: [{ url: "video_url" }] }
+    if (data?.data?.[0]?.url) {
+      return res.status(200).json({ videoUrl: data.data[0].url });
+    }
+    
+    return res.status(502).json({ error: 'No video URL returned', body: data });
   } catch (e) {
     console.error('generate-video error', e);
     return res.status(500).json({ error: 'Internal Server Error', message: String(e) });
