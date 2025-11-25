@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Loader, Zap, Calendar, TrendingUp, BarChart3, User, Settings, Play, Pause,
-  CheckCircle, Trash2, Eye, Image, X, ChartBar
+  CheckCircle, Trash2, Eye, Image, X, BarChart
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -753,7 +753,7 @@ function TrackingTab({ published, setShowSimulator }) {
                 onClick={() => setShowSimulator(video)}
                 className="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition"
               >
-                <ChartBar size={20} />
+                <BarChart size={20} />
               </button>
             </div>
           ))}
