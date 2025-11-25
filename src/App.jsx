@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Loader, Zap, Calendar, TrendingUp, BarChart3, User, Crown, Play, Pause,
-  CheckCircle, Clock, Settings, Edit3, Trash2, Eye, Upload
+  CheckCircle, Clock, Trash2, Eye, Upload, Search, Sparkles
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -109,32 +109,50 @@ export default function App() {
 
   const scanTrends = async () => {
     try {
-      const topics = ['Tech', 'AI', 'Finance', 'Fitness', 'Food', 'Travel', 'Gaming', 'Fashion'];
-      const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-      
-      const response = await fetch('/api/analyze-trends', {
+      // Get real Google Trends data
+      const trendsResponse = await fetch('/api/google-trends', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: randomTopic, category: randomTopic })
+        body: JSON.stringify({ region: 'DE', category: '' })
       });
 
-      if (!response.ok) throw new Error('Trend scan failed');
+      if (!trendsResponse.ok) throw new Error('Trends fetch failed');
 
-      const data = await response.json();
-      const conceptsWithImages = await Promise.all(
-        data.concepts.map(async (concept) => {
+      const trendsData = await trendsResponse.json();
+      
+      // Generate video concepts from trending topics
+      const concepts = await Promise.all(
+        trendsData.trends.slice(0, 4).map(async (trend) => {
+          const response = await fetch('/api/analyze-trends', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic: trend.title, category: trend.category })
+          });
+
+          if (!response.ok) throw new Error('Concept generation failed');
+
+          const data = await response.json();
+          const concept = data.concepts[0];
+          
+          // Generate thumbnail
           const imgResponse = await fetch('/api/generate-thumbnail', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt: concept.visualDescription })
           });
           const imgData = await imgResponse.json();
-          return { ...concept, imageUrl: imgData.imageUrl, id: Date.now() + Math.random() };
+          
+          return { 
+            ...concept, 
+            imageUrl: imgData.imageUrl, 
+            id: Date.now() + Math.random(),
+            trendInfo: trend
+          };
         })
       );
 
-      setTrends(prev => [...conceptsWithImages, ...prev].slice(0, 20));
-      setCurrentStrategy(randomTopic);
+      setTrends(prev => [...concepts, ...prev].slice(0, 20));
+      setCurrentStrategy('Google Trends Auto');
     } catch (error) {
       console.error('Auto scan error:', error);
     }
@@ -293,57 +311,60 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-xl">
-              <Zap className="text-white" size={24} />
+    <div className="min-h-screen bg-white">
+      {/* Simple Header */}
+      <header className="bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg">
+        <div className="container mx-auto px-6 py-6">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <Zap size={32} className="text-yellow-300" />
+              <div>
+                <h1 className="text-3xl font-bold">BrutusAi</h1>
+                <p className="text-sm text-blue-100">Automatisches Content Studio</p>
+              </div>
             </div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              BrutusAi
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg font-semibold hover:shadow-lg transition flex items-center gap-2">
-              <Play size={16} />Start Auto
-            </button>
-            {userProfile.tier === 'pro' ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-yellow-400 to-orange-400 rounded-full shadow">
-                <Crown size={16} className="text-white" />
-                <span className="text-sm font-bold text-white">PRO</span>
-              </div>
-            ) : (
-              <div className="text-sm font-medium text-gray-600">
-                Credits: <span className="text-blue-600 font-bold">{userProfile.creditsRemaining}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-6">
+              {schedulerActive && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-green-500 rounded-full animate-pulse">
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
+                  <span className="text-sm font-bold">AUTO AKTIV</span>
+                </div>
+              )}
+              {userProfile.tier === 'pro' ? (
+                <div className="flex items-center gap-2 px-4 py-2 bg-yellow-400 text-black rounded-full font-bold">
+                  <Crown size={18} />PRO
+                </div>
+              ) : (
+                <div className="text-right">
+                  <div className="text-sm opacity-90">Credits</div>
+                  <div className="text-2xl font-bold">{userProfile.creditsRemaining}</div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200">
+      {/* Simple Navigation */}
+      <nav className="bg-white border-b-2 border-gray-200 sticky top-0 z-10">
         <div className="container mx-auto px-6">
-          <div className="flex gap-1">
+          <div className="flex">
             {[
-              { id: 'studio', label: 'Studio', icon: Zap },
-              { id: 'planer', label: 'Planer', icon: Calendar },
-              { id: 'tracking', label: 'Tracking', icon: BarChart3 },
-              { id: 'profil', label: 'Profil', icon: User }
+              { id: 'studio', label: '🎬 Studio', icon: Zap },
+              { id: 'planer', label: '📅 Planer', icon: Calendar },
+              { id: 'tracking', label: '📊 Videos', icon: BarChart3 },
+              { id: 'profil', label: '👤 Profil', icon: User }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-4 border-b-2 transition font-medium ${
+                className={`px-8 py-4 font-bold text-lg border-b-4 transition-all ${
                   activeTab === tab.id 
-                    ? 'border-blue-600 text-blue-600' 
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-blue-600 text-blue-600 bg-blue-50' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                <tab.icon size={18} />
-                <span>{tab.label}</span>
+                {tab.label}
               </button>
             ))}
           </div>
@@ -391,124 +412,112 @@ export default function App() {
 // === STUDIO TAB ===
 function StudioTab({ scanningMode, setScanningMode, currentStrategy, setCurrentStrategy, autoScanActive, startAutoScan, stopAutoScan, scanCustomTrends, trends, produceAndUpload, schedulePost }) {
   return (
-    <div className="space-y-6">
-      {/* Scan Mode Tabs */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="flex border-b border-gray-200">
+    <div className="space-y-8">
+      {/* Big Action Button */}
+      <div className="text-center">
+        {autoScanActive ? (
+          <div className="inline-block">
+            <button
+              onClick={stopAutoScan}
+              className="px-12 py-6 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-3xl font-bold text-2xl hover:shadow-2xl transition-all transform hover:scale-105 flex items-center gap-4"
+            >
+              <Pause size={32} />
+              <div className="text-left">
+                <div>Auto-Scan STOPPEN</div>
+                <div className="text-sm font-normal opacity-90">Läuft seit Start...</div>
+              </div>
+            </button>
+            <div className="mt-4 flex items-center justify-center gap-2 text-green-600 font-bold">
+              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+              Scannt automatisch Google Trends jede Stunde
+            </div>
+          </div>
+        ) : (
           <button
-            onClick={() => setScanningMode('auto')}
-            className={`flex-1 px-6 py-3 font-semibold transition ${
-              scanningMode === 'auto' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
-            }`}
+            onClick={startAutoScan}
+            className="px-12 py-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-3xl font-bold text-2xl hover:shadow-2xl transition-all transform hover:scale-105 flex items-center gap-4 mx-auto"
           >
-            Auto
+            <Play size={32} />
+            <div className="text-left">
+              <div>AUTO-SCAN STARTEN</div>
+              <div className="text-sm font-normal opacity-90">Findet automatisch virale Trends</div>
+            </div>
           </button>
-          <button
-            onClick={() => setScanningMode('custom')}
-            className={`flex-1 px-6 py-3 font-semibold transition ${
-              scanningMode === 'custom' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            Custom
-          </button>
-        </div>
+        )}
+      </div>
 
-        <div className="p-6">
-          {scanningMode === 'auto' ? (
-            <div>
-              <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-8 text-white mb-6">
-                <div className="flex items-start gap-4">
-                  <div className="bg-white/20 p-3 rounded-xl">
-                    <TrendingUp size={32} />
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-2xl font-bold mb-2">Trend Spy AI</h2>
-                    <p className="text-blue-100 mb-4">
-                      Analysiert virale Signale für deine Nische.
-                    </p>
-                    {autoScanActive ? (
-                      <button
-                        onClick={stopAutoScan}
-                        className="px-6 py-3 bg-white text-blue-600 rounded-xl font-bold hover:shadow-lg transition flex items-center gap-2"
-                      >
-                        <Pause size={20} />Stoppen
-                      </button>
-                    ) : (
-                      <button
-                        onClick={startAutoScan}
-                        className="px-6 py-3 bg-white text-blue-600 rounded-xl font-bold hover:shadow-lg transition flex items-center gap-2"
-                      >
-                        <Play size={20} />Auto-Scan starten
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-              {autoScanActive && (
-                <div className="flex items-center gap-2 text-green-600 font-medium">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  Scannt automatisch jede Stunde...
-                </div>
-              )}
-            </div>
-          ) : (
-            <div>
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Settings className="inline mr-2" size={16} />Strategie
-                </label>
-                <input
-                  type="text"
-                  value={currentStrategy}
-                  onChange={(e) => setCurrentStrategy(e.target.value)}
-                  placeholder="Aktueller Teknus..."
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-              <button
-                onClick={scanCustomTrends}
-                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold hover:shadow-lg transition"
-              >
-                Strategie Update
-              </button>
-            </div>
-          )}
+      {/* Manual Search */}
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-3xl shadow-lg p-8 border-2 border-gray-200">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <Search className="text-blue-600" />
+            Oder eigenes Thema suchen
+          </h3>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={currentStrategy}
+              onChange={(e) => setCurrentStrategy(e.target.value)}
+              placeholder="z.B. KI, Fitness, Finanzen..."
+              className="flex-1 px-6 py-4 text-lg border-2 border-gray-300 rounded-2xl focus:border-blue-600 outline-none"
+            />
+            <button
+              onClick={scanCustomTrends}
+              className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition"
+            >
+              Scannen
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Trends Display */}
-      {trends.length > 0 && (
+      {/* Trends Grid */}
+      {trends.length > 0 ? (
         <div>
-          <h3 className="text-lg font-bold text-gray-800 mb-4">
-            Noch keine Trends. Klicke "Scannen" oder "Strategie Update".
+          <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
+            <Sparkles className="text-yellow-500" />
+            {trends.length} Virale Video-Ideen gefunden
           </h3>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {trends.map((trend, idx) => (
-              <div key={trend.id || idx} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition">
+              <div key={trend.id || idx} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:scale-105 border-2 border-gray-100">
                 {trend.imageUrl && (
-                  <img src={trend.imageUrl} alt={trend.title} className="w-full h-40 object-cover" />
+                  <div className="relative">
+                    <img src={trend.imageUrl} alt={trend.title} className="w-full h-48 object-cover" />
+                    {trend.trendInfo && (
+                      <div className="absolute top-3 right-3 px-3 py-1 bg-red-500 text-white rounded-full text-xs font-bold">
+                        🔥 {(trend.trendInfo.traffic / 1000).toFixed(0)}K
+                      </div>
+                    )}
+                  </div>
                 )}
-                <div className="p-4 space-y-3">
-                  <h4 className="font-bold text-gray-800">{trend.title}</h4>
+                <div className="p-5 space-y-3">
+                  <h4 className="font-bold text-lg">{trend.title}</h4>
                   <p className="text-sm text-gray-600 line-clamp-2">{trend.hook}</p>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 pt-2">
                     <button
                       onClick={() => schedulePost(trend)}
-                      className="flex-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1"
+                      className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition flex items-center justify-center gap-2"
                     >
-                      <Calendar size={14} />Planen
+                      <Calendar size={16} />Planen
                     </button>
                     <button
                       onClick={() => produceAndUpload(trend)}
-                      className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-sm font-bold hover:shadow-lg transition flex items-center justify-center gap-1"
+                      className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2"
                     >
-                      <Play size={14} />Produzieren
+                      <Play size={16} />Jetzt
                     </button>
                   </div>
                 </div>
               </div>
             ))}
           </div>
+        </div>
+      ) : (
+        <div className="text-center py-20 text-gray-400">
+          <TrendingUp size={80} className="mx-auto mb-6 opacity-30" />
+          <p className="text-xl">Klicke oben auf "AUTO-SCAN STARTEN"</p>
+          <p className="text-lg mt-2">oder suche nach einem eigenen Thema</p>
         </div>
       )}
     </div>
@@ -518,90 +527,103 @@ function StudioTab({ scanningMode, setScanningMode, currentStrategy, setCurrentS
 // === PLANER TAB ===
 function PlanerTab({ schedulerActive, scheduleInterval, setScheduleInterval, scheduleTime, setScheduleTime, startScheduler, stopScheduler, scheduledPosts, deleteScheduled, produceAndUpload }) {
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <Calendar className="text-blue-600" />Automatischer Planer
+    <div className="space-y-8">
+      {/* Big Scheduler Control */}
+      <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl p-8 text-white shadow-2xl">
+        <h2 className="text-3xl font-bold mb-6 flex items-center gap-3">
+          <Calendar size={36} />
+          Automatischer Upload-Planer
         </h2>
         
-        <div className="grid md:grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Intervall</label>
-            <select
-              value={scheduleInterval}
-              onChange={(e) => setScheduleInterval(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              <option value="daily">Täglich</option>
-              <option value="weekly">Wöchentlich</option>
-              <option value="monthly">Monatlich</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Uhrzeit</label>
-            <input
-              type="time"
-              value={scheduleTime}
-              onChange={(e) => setScheduleTime(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-          </div>
-          <div className="flex items-end">
-            {schedulerActive ? (
-              <button
-                onClick={stopScheduler}
-                className="w-full px-6 py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition flex items-center justify-center gap-2"
+        <div className="bg-white/10 backdrop-blur rounded-2xl p-6 mb-6">
+          <div className="grid md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-sm font-bold mb-3 text-white/90">Wie oft posten?</label>
+              <select
+                value={scheduleInterval}
+                onChange={(e) => setScheduleInterval(e.target.value)}
+                className="w-full px-4 py-3 bg-white text-gray-800 rounded-xl font-bold text-lg focus:ring-4 focus:ring-white/50 outline-none"
               >
-                <Pause size={20} />Stoppen
-              </button>
-            ) : (
-              <button
-                onClick={startScheduler}
-                className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2"
-              >
-                <Play size={20} />Starten
-              </button>
-            )}
+                <option value="daily">🗓️ Jeden Tag</option>
+                <option value="weekly">📅 Jede Woche</option>
+                <option value="monthly">📆 Jeden Monat</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-bold mb-3 text-white/90">Um welche Uhrzeit?</label>
+              <input
+                type="time"
+                value={scheduleTime}
+                onChange={(e) => setScheduleTime(e.target.value)}
+                className="w-full px-4 py-3 bg-white text-gray-800 rounded-xl font-bold text-lg focus:ring-4 focus:ring-white/50 outline-none"
+              />
+            </div>
+            <div className="flex items-end">
+              {schedulerActive ? (
+                <button
+                  onClick={stopScheduler}
+                  className="w-full px-6 py-3 bg-red-500 text-white rounded-xl font-bold text-lg hover:bg-red-600 transition flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Pause size={24} />STOPPEN
+                </button>
+              ) : (
+                <button
+                  onClick={startScheduler}
+                  className="w-full px-6 py-3 bg-green-500 text-white rounded-xl font-bold text-lg hover:bg-green-600 transition flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Play size={24} />STARTEN
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         {schedulerActive && (
-          <div className="flex items-center gap-2 text-green-600 font-medium bg-green-50 px-4 py-2 rounded-lg">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            Scheduler aktiv - Postet automatisch {scheduleInterval === 'daily' ? 'täglich' : scheduleInterval === 'weekly' ? 'wöchentlich' : 'monatlich'} um {scheduleTime} Uhr
+          <div className="bg-green-500 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-4 h-4 bg-white rounded-full animate-pulse"></div>
+            <div className="font-bold text-lg">
+              ✅ Läuft! Postet automatisch {scheduleInterval === 'daily' ? 'täglich' : scheduleInterval === 'weekly' ? 'wöchentlich' : 'monatlich'} um {scheduleTime} Uhr
+            </div>
           </div>
         )}
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Geplante Posts</h3>
+      {/* Scheduled Posts */}
+      <div className="bg-white rounded-3xl shadow-lg p-8 border-2 border-gray-200">
+        <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          📋 Geplante Posts ({scheduledPosts.length})
+        </h3>
         {scheduledPosts.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">Keine geplanten Posts</p>
+          <div className="text-center py-12 text-gray-400">
+            <Calendar size={64} className="mx-auto mb-4 opacity-30" />
+            <p className="text-lg">Keine geplanten Posts</p>
+            <p className="text-sm mt-2">Gehe zu Studio und klicke "Planen"</p>
+          </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {scheduledPosts.map(post => (
-              <div key={post.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <div key={post.id} className="flex items-center gap-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl border-2 border-blue-200 hover:shadow-lg transition">
                 {post.imageUrl && (
-                  <img src={post.imageUrl} alt={post.title} className="w-16 h-16 object-cover rounded-lg" />
+                  <img src={post.imageUrl} alt={post.title} className="w-20 h-20 object-cover rounded-xl" />
                 )}
                 <div className="flex-1">
-                  <h4 className="font-bold text-gray-800">{post.title}</h4>
-                  <p className="text-sm text-gray-600">
-                    <Clock size={12} className="inline mr-1" />
+                  <h4 className="font-bold text-lg">{post.title}</h4>
+                  <p className="text-sm text-gray-600 flex items-center gap-2 mt-1">
+                    <Clock size={14} />
                     {new Date(post.scheduledFor).toLocaleString('de-DE')}
                   </p>
                 </div>
                 <button
                   onClick={() => produceAndUpload(post)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  className="px-6 py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 transition flex items-center gap-2"
                 >
-                  <Upload size={16} />
+                  <Upload size={18} />Jetzt posten
                 </button>
                 <button
                   onClick={() => deleteScheduled(post.id)}
-                  className="px-4 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
+                  className="px-4 py-3 bg-red-100 text-red-600 rounded-xl font-bold hover:bg-red-200 transition"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={18} />
                 </button>
               </div>
             ))}
@@ -614,43 +636,73 @@ function PlanerTab({ schedulerActive, scheduleInterval, setScheduleInterval, sch
 
 // === TRACKING TAB ===
 function TrackingTab({ published }) {
+  const totalViews = published.reduce((sum, v) => sum + (v.views || 0), 0);
+  const totalLikes = published.reduce((sum, v) => sum + (v.likes || 0), 0);
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-      <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-        <BarChart3 className="text-blue-600" />Veröffentlichte Videos
-      </h2>
-      {published.length === 0 ? (
-        <p className="text-gray-500 text-center py-12">Noch keine Videos veröffentlicht</p>
-      ) : (
-        <div className="space-y-4">
-          {published.map(video => (
-            <div key={video.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-md transition">
-              {video.imageUrl && (
-                <img src={video.imageUrl} alt={video.title} className="w-24 h-24 object-cover rounded-lg" />
-              )}
-              <div className="flex-1">
-                <h3 className="font-bold text-gray-800 mb-1">{video.title}</h3>
-                <p className="text-sm text-gray-600 mb-2">{video.hook}</p>
-                <div className="flex gap-4 text-sm">
-                  <span className="flex items-center gap-1 text-gray-600">
-                    <Eye size={14} className="text-blue-500" />{video.views || 0} Views
-                  </span>
-                  <span className="flex items-center gap-1 text-gray-600">
-                    ❤️ {video.likes || 0} Likes
-                  </span>
-                  <span className={`flex items-center gap-1 font-medium ${
-                    video.status === 'published' ? 'text-green-600' : 
-                    video.status === 'processing' ? 'text-yellow-600' : 'text-gray-600'
-                  }`}>
-                    {video.status === 'published' ? <CheckCircle size={14} /> : <Clock size={14} />}
-                    {video.status}
-                  </span>
+    <div className="space-y-6">
+      {/* Stats Overview */}
+      <div className="grid md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-3xl p-6 text-white shadow-xl">
+          <div className="text-sm font-semibold opacity-90 mb-2">Gesamt Videos</div>
+          <div className="text-5xl font-bold">{published.length}</div>
+        </div>
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-3xl p-6 text-white shadow-xl">
+          <div className="text-sm font-semibold opacity-90 mb-2">Gesamt Views</div>
+          <div className="text-5xl font-bold">{totalViews.toLocaleString()}</div>
+        </div>
+        <div className="bg-gradient-to-br from-pink-500 to-pink-600 rounded-3xl p-6 text-white shadow-xl">
+          <div className="text-sm font-semibold opacity-90 mb-2">Gesamt Likes</div>
+          <div className="text-5xl font-bold">{totalLikes.toLocaleString()}</div>
+        </div>
+      </div>
+
+      {/* Videos List */}
+      <div className="bg-white rounded-3xl shadow-lg p-8 border-2 border-gray-200">
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          🎬 Alle Videos ({published.length})
+        </h2>
+        {published.length === 0 ? (
+          <div className="text-center py-20 text-gray-400">
+            <Eye size={80} className="mx-auto mb-6 opacity-30" />
+            <p className="text-xl">Noch keine Videos veröffentlicht</p>
+            <p className="text-lg mt-2">Gehe zu Studio und produziere dein erstes Video!</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {published.map(video => (
+              <div key={video.id} className="flex items-center gap-6 p-6 bg-gradient-to-r from-gray-50 to-blue-50 rounded-2xl border-2 border-gray-200 hover:shadow-xl transition-all">
+                {video.imageUrl && (
+                  <img src={video.imageUrl} alt={video.title} className="w-32 h-32 object-cover rounded-xl shadow-md" />
+                )}
+                <div className="flex-1">
+                  <h3 className="font-bold text-xl mb-2">{video.title}</h3>
+                  <p className="text-gray-600 mb-3">{video.hook}</p>
+                  <div className="flex gap-6">
+                    <div className="flex items-center gap-2">
+                      <Eye className="text-blue-500" size={20} />
+                      <span className="font-bold text-lg">{video.views || 0}</span>
+                      <span className="text-sm text-gray-500">Views</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">❤️</span>
+                      <span className="font-bold text-lg">{video.likes || 0}</span>
+                      <span className="text-sm text-gray-500">Likes</span>
+                    </div>
+                    <div className={`flex items-center gap-2 px-4 py-1 rounded-full font-bold ${
+                      video.status === 'published' ? 'bg-green-100 text-green-700' : 
+                      video.status === 'processing' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {video.status === 'published' ? <CheckCircle size={16} /> : <Clock size={16} />}
+                      {video.status}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -658,54 +710,79 @@ function TrackingTab({ published }) {
 // === PROFIL TAB ===
 function ProfilTab({ userProfile }) {
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <User className="text-blue-600" />Account Status
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-3xl p-8 text-white shadow-2xl">
+        <h2 className="text-3xl font-bold mb-8 flex items-center gap-3">
+          <User size={36} />
+          Dein Account
         </h2>
         
         <div className="grid md:grid-cols-2 gap-6">
-          <div className="p-6 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border border-blue-200">
-            <h3 className="font-bold text-gray-800 mb-4">Mitgliedschaft</h3>
+          {/* Membership */}
+          <div className="bg-white/10 backdrop-blur rounded-2xl p-6">
+            <h3 className="text-lg font-bold mb-4">Mitgliedschaft</h3>
             {userProfile.tier === 'pro' ? (
-              <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-yellow-400 to-orange-400 rounded-xl">
-                <Crown className="text-white" size={32} />
-                <div>
-                  <p className="font-bold text-white">PRO Member</p>
-                  <p className="text-sm text-white/90">Unlimited Credits</p>
-                </div>
+              <div className="bg-gradient-to-r from-yellow-400 to-orange-400 rounded-xl p-6 text-center">
+                <Crown className="mx-auto mb-3 text-white" size={48} />
+                <div className="text-2xl font-bold text-white">PRO Member</div>
+                <div className="text-white/90 mt-2">Unlimited Credits</div>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="p-4 bg-white rounded-xl">
-                  <p className="text-gray-600 text-sm mb-1">Free Tier</p>
-                  <p className="text-3xl font-bold text-blue-600">{userProfile.creditsRemaining}</p>
-                  <p className="text-sm text-gray-500">Credits verbleibend</p>
+                <div className="bg-white rounded-xl p-6 text-center">
+                  <div className="text-gray-600 text-sm mb-2">Free Tier</div>
+                  <div className="text-6xl font-bold text-blue-600 mb-2">{userProfile.creditsRemaining}</div>
+                  <div className="text-gray-500">Credits übrig</div>
                 </div>
-                <button className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2">
-                  <Crown size={20} />Upgrade zu PRO - 9,99€/Monat
+                <button className="w-full px-6 py-4 bg-gradient-to-r from-yellow-400 to-orange-400 text-white rounded-xl font-bold text-lg hover:shadow-2xl transition-all transform hover:scale-105 flex items-center justify-center gap-3">
+                  <Crown size={24} />
+                  Upgrade zu PRO
+                  <div className="text-sm font-normal">9,99€/Monat</div>
                 </button>
               </div>
             )}
           </div>
 
-          <div className="p-6 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border border-blue-200">
-            <h3 className="font-bold text-gray-800 mb-4">Statistiken</h3>
+          {/* Stats */}
+          <div className="bg-white/10 backdrop-blur rounded-2xl p-6">
+            <h3 className="text-lg font-bold mb-4">Deine Statistiken</h3>
             <div className="space-y-4">
-              <div className="flex justify-between items-center p-3 bg-white rounded-xl">
-                <span className="text-gray-600">Videos produziert</span>
-                <span className="text-2xl font-bold text-blue-600">{userProfile.videosProduced}</span>
+              <div className="bg-white/20 rounded-xl p-4 flex justify-between items-center">
+                <span className="text-white/90">Videos produziert</span>
+                <span className="text-3xl font-bold">{userProfile.videosProduced}</span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-white rounded-xl">
-                <span className="text-gray-600">Gesamt Views</span>
-                <span className="text-2xl font-bold text-blue-600">0</span>
+              <div className="bg-white/20 rounded-xl p-4 flex justify-between items-center">
+                <span className="text-white/90">Gesamt Views</span>
+                <span className="text-3xl font-bold">0</span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-white rounded-xl">
-                <span className="text-gray-600">Gesamt Likes</span>
-                <span className="text-2xl font-bold text-blue-600">0</span>
+              <div className="bg-white/20 rounded-xl p-4 flex justify-between items-center">
+                <span className="text-white/90">Gesamt Likes</span>
+                <span className="text-3xl font-bold">0</span>
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Features Overview */}
+      <div className="bg-white rounded-3xl shadow-lg p-8 border-2 border-gray-200">
+        <h3 className="text-2xl font-bold mb-6">Was BrutusAi kann:</h3>
+        <div className="grid md:grid-cols-2 gap-4">
+          {[
+            '🔍 Automatische Google Trends Suche',
+            '🎬 Video-Konzepte mit AI erstellen',
+            '🖼️ Automatische Thumbnails generieren',
+            '📅 Scheduler für automatische Posts',
+            '📊 Performance Tracking',
+            '⚡ Vollautomatischer Workflow',
+            '🎯 TikTok & YouTube Shorts',
+            '🚀 Ein-Klick Produktion'
+          ].map((feature, i) => (
+            <div key={i} className="flex items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border-2 border-blue-100">
+              <CheckCircle className="text-green-500" size={20} />
+              <span className="font-medium">{feature}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
