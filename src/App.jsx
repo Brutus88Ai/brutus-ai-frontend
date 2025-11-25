@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Loader, Zap, AlertCircle, Settings, TrendingUp, Play, 
-  Pause, BarChart3, User, Crown, Plus, Trash2, Eye,
-  Upload, Download, CheckCircle, XCircle, Clock
+  Loader, Zap, Calendar, TrendingUp, BarChart3, User, Crown, Play, Pause,
+  CheckCircle, Clock, Settings, Edit3, Trash2, Eye, Upload
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { 
-  getFirestore, doc, setDoc, collection, getDocs, getDoc,
-  query, where, orderBy, onSnapshot, deleteDoc, updateDoc, serverTimestamp, addDoc
+  getFirestore, doc, setDoc, collection, getDocs, getDoc, addDoc, deleteDoc, serverTimestamp
 } from 'firebase/firestore';
 
 // === FIREBASE SETUP ===
@@ -37,23 +35,26 @@ const appId = (typeof __app_id !== 'undefined' ? __app_id : 'brutusai').replace(
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('trends');
+  const [activeTab, setActiveTab] = useState('studio');
   
-  const [topic, setTopic] = useState('');
-  const [category, setCategory] = useState('Tech');
-  const [concepts, setConcepts] = useState([]);
-  const [analyzingTrends, setAnalyzingTrends] = useState(false);
+  // Auto-Scan State
+  const [autoScanActive, setAutoScanActive] = useState(false);
+  const [currentStrategy, setCurrentStrategy] = useState('');
+  const [trends, setTrends] = useState([]);
+  const [scanningMode, setScanningMode] = useState('auto'); // 'auto' or 'custom'
   
-  const [autoPilotActive, setAutoPilotActive] = useState(false);
-  const [autoPilotQueue, setAutoPilotQueue] = useState([]);
-  const [currentProduction, setCurrentProduction] = useState(null);
+  // Scheduler State
+  const [schedulerActive, setSchedulerActive] = useState(false);
+  const [scheduleInterval, setScheduleInterval] = useState('daily'); // 'daily', 'weekly', 'monthly'
+  const [scheduleTime, setScheduleTime] = useState('09:00');
+  const [scheduledPosts, setScheduledPosts] = useState([]);
   
-  const [drafts, setDrafts] = useState([]);
+  // Published & Profile
   const [published, setPublished] = useState([]);
   const [userProfile, setUserProfile] = useState({ tier: 'free', videosProduced: 0, creditsRemaining: 10 });
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
   
-  const autoPilotInterval = useRef(null);
+  const autoScanInterval = useRef(null);
+  const schedulerInterval = useRef(null);
 
   useEffect(() => {
     if (!auth) {
@@ -76,126 +77,156 @@ export default function App() {
     if (!db) return;
     try {
       const profileDoc = await getDoc(doc(db, `artifacts/${appId}/users/${userId}/profile`, 'data'));
-      if (profileDoc.exists()) {
-        setUserProfile(profileDoc.data());
-      }
+      if (profileDoc.exists()) setUserProfile(profileDoc.data());
 
-      const draftsSnap = await getDocs(collection(db, `artifacts/${appId}/users/${userId}/drafts`));
-      setDrafts(draftsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
-      const publishedSnap = await getDocs(
-        query(collection(db, `artifacts/${appId}/users/${userId}/published`), orderBy('publishedAt', 'desc'))
-      );
+      const publishedSnap = await getDocs(collection(db, `artifacts/${appId}/users/${userId}/published`));
       setPublished(publishedSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      const scheduleSnap = await getDocs(collection(db, `artifacts/${appId}/users/${userId}/schedule`));
+      setScheduledPosts(scheduleSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (error) {
       console.error('Load user data error:', error);
     }
   };
 
-  const analyzeTrends = async () => {
-    if (!topic.trim()) {
-      alert('Please enter a topic');
-      return;
-    }
-    if (userProfile.creditsRemaining <= 0 && userProfile.tier === 'free') {
-      alert('No credits remaining. Upgrade to Pro!');
-      return;
-    }
+  // === AUTO TREND SCAN ===
+  const startAutoScan = async () => {
+    setAutoScanActive(true);
+    await scanTrends();
+    
+    autoScanInterval.current = setInterval(async () => {
+      await scanTrends();
+    }, 3600000); // Scan every hour
+  };
 
-    setAnalyzingTrends(true);
+  const stopAutoScan = () => {
+    setAutoScanActive(false);
+    if (autoScanInterval.current) {
+      clearInterval(autoScanInterval.current);
+      autoScanInterval.current = null;
+    }
+  };
+
+  const scanTrends = async () => {
+    try {
+      const topics = ['Tech', 'AI', 'Finance', 'Fitness', 'Food', 'Travel', 'Gaming', 'Fashion'];
+      const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+      
+      const response = await fetch('/api/analyze-trends', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: randomTopic, category: randomTopic })
+      });
+
+      if (!response.ok) throw new Error('Trend scan failed');
+
+      const data = await response.json();
+      const conceptsWithImages = await Promise.all(
+        data.concepts.map(async (concept) => {
+          const imgResponse = await fetch('/api/generate-thumbnail', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: concept.visualDescription })
+          });
+          const imgData = await imgResponse.json();
+          return { ...concept, imageUrl: imgData.imageUrl, id: Date.now() + Math.random() };
+        })
+      );
+
+      setTrends(prev => [...conceptsWithImages, ...prev].slice(0, 20));
+      setCurrentStrategy(randomTopic);
+    } catch (error) {
+      console.error('Auto scan error:', error);
+    }
+  };
+
+  const scanCustomTrends = async () => {
+    if (!currentStrategy.trim()) {
+      alert('Bitte Strategie eingeben');
+      return;
+    }
+    
     try {
       const response = await fetch('/api/analyze-trends', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, category })
+        body: JSON.stringify({ topic: currentStrategy, category: 'Custom' })
       });
 
-      if (!response.ok) throw new Error('Failed to analyze trends');
+      if (!response.ok) throw new Error('Scan failed');
 
       const data = await response.json();
-      
       const conceptsWithImages = await Promise.all(
         data.concepts.map(async (concept) => {
-          try {
-            const imgResponse = await fetch('/api/generate-thumbnail', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt: concept.visualPrompt })
-            });
-            const imgData = await imgResponse.json();
-            return { ...concept, imageUrl: imgData.imageUrl, id: Date.now() + Math.random() };
-          } catch (error) {
-            return { ...concept, imageUrl: null, id: Date.now() + Math.random() };
-          }
+          const imgResponse = await fetch('/api/generate-thumbnail', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: concept.visualDescription })
+          });
+          const imgData = await imgResponse.json();
+          return { ...concept, imageUrl: imgData.imageUrl, id: Date.now() + Math.random() };
         })
       );
 
-      setConcepts(conceptsWithImages);
-      
-      if (userProfile.tier === 'free') {
-        const newCredits = Math.max(0, userProfile.creditsRemaining - 1);
-        setUserProfile(prev => ({ ...prev, creditsRemaining: newCredits }));
-        if (user && db) {
-          await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/profile`, 'data'), {
-            ...userProfile,
-            creditsRemaining: newCredits
-          }, { merge: true });
-        }
+      setTrends(conceptsWithImages);
+    } catch (error) {
+      console.error('Custom scan error:', error);
+      alert('Scan fehlgeschlagen');
+    }
+  };
+
+  // === SCHEDULER ===
+  const startScheduler = () => {
+    if (trends.length === 0) {
+      alert('Erst Trends scannen!');
+      return;
+    }
+    
+    setSchedulerActive(true);
+    
+    const intervalMs = scheduleInterval === 'daily' ? 86400000 : 
+                      scheduleInterval === 'weekly' ? 604800000 : 2592000000;
+    
+    schedulerInterval.current = setInterval(async () => {
+      if (trends.length > 0) {
+        const randomTrend = trends[Math.floor(Math.random() * trends.length)];
+        await produceAndUpload(randomTrend);
       }
-    } catch (error) {
-      console.error('Trend analysis error:', error);
-      alert('Failed to analyze trends. Please try again.');
-    } finally {
-      setAnalyzingTrends(false);
+    }, intervalMs);
+  };
+
+  const stopScheduler = () => {
+    setSchedulerActive(false);
+    if (schedulerInterval.current) {
+      clearInterval(schedulerInterval.current);
+      schedulerInterval.current = null;
     }
   };
 
-  const saveDraft = async (concept) => {
-    if (!user || !db) return;
-    try {
-      const draftRef = await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/drafts`), {
-        ...concept,
-        savedAt: serverTimestamp(),
-        status: 'draft'
-      });
-      setDrafts(prev => [...prev, { id: draftRef.id, ...concept, status: 'draft' }]);
-      alert('Saved as draft!');
-    } catch (error) {
-      console.error('Save draft error:', error);
-    }
-  };
-
-  const deleteDraft = async (draftId) => {
-    if (!user || !db) return;
-    try {
-      await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/drafts`, draftId));
-      setDrafts(prev => prev.filter(d => d.id !== draftId));
-    } catch (error) {
-      console.error('Delete draft error:', error);
-    }
-  };
-
-  const produceVideo = async (concept) => {
+  const produceAndUpload = async (trend) => {
     if (userProfile.creditsRemaining <= 0 && userProfile.tier === 'free') {
-      alert('No credits remaining. Upgrade to Pro!');
+      alert('Keine Credits mehr! Upgrade zu PRO.');
+      stopScheduler();
       return;
     }
 
     try {
-      const response = await fetch('/api/trigger-production', {
+      // Trigger video production
+      await fetch('/api/trigger-production', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ concept, imageUrl: concept.imageUrl, userId: user?.uid })
+        body: JSON.stringify({
+          userId: user?.uid || 'anonymous',
+          concept: trend,
+          thumbnail: trend.imageUrl,
+          platform: 'tiktok'
+        })
       });
 
-      if (!response.ok) throw new Error('Production failed');
-
-      const data = await response.json();
-
+      // Save to published
       if (user && db) {
         await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/published`), {
-          ...concept,
-          productionId: data.productionId,
+          ...trend,
           publishedAt: serverTimestamp(),
           status: 'processing',
           views: 0,
@@ -203,6 +234,7 @@ export default function App() {
         });
       }
 
+      // Update credits
       const newCredits = userProfile.tier === 'free' ? Math.max(0, userProfile.creditsRemaining - 1) : userProfile.creditsRemaining;
       const newCount = userProfile.videosProduced + 1;
       setUserProfile(prev => ({ ...prev, creditsRemaining: newCredits, videosProduced: newCount }));
@@ -210,113 +242,104 @@ export default function App() {
       if (user && db) {
         await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/profile`, 'data'), {
           creditsRemaining: newCredits,
-          videosProduced: newCount
+          videosProduced: newCount,
+          tier: userProfile.tier
         }, { merge: true });
       }
 
-      alert('Video production started!');
       await loadUserData(user.uid);
     } catch (error) {
       console.error('Production error:', error);
-      alert('Failed to start production');
     }
   };
 
-  const startAutoPilot = () => {
-    if (concepts.length === 0) {
-      alert('Generate concepts first!');
-      return;
-    }
-    
-    setAutoPilotActive(true);
-    setAutoPilotQueue([...concepts]);
-    
-    autoPilotInterval.current = setInterval(async () => {
-      setAutoPilotQueue(queue => {
-        if (queue.length === 0) {
-          stopAutoPilot();
-          return [];
-        }
-        
-        const [next, ...rest] = queue;
-        setCurrentProduction(next);
-        
-        produceVideo(next).then(() => {
-          setTimeout(() => setCurrentProduction(null), 2000);
-        });
-        
-        return rest;
+  const schedulePost = async (trend) => {
+    if (!user || !db) return;
+    try {
+      await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/schedule`), {
+        ...trend,
+        scheduledFor: new Date(Date.now() + 3600000).toISOString(),
+        createdAt: serverTimestamp()
       });
-    }, 10000);
+      await loadUserData(user.uid);
+    } catch (error) {
+      console.error('Schedule error:', error);
+    }
   };
 
-  const stopAutoPilot = () => {
-    setAutoPilotActive(false);
-    if (autoPilotInterval.current) {
-      clearInterval(autoPilotInterval.current);
-      autoPilotInterval.current = null;
+  const deleteScheduled = async (id) => {
+    if (!user || !db) return;
+    try {
+      await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/schedule`, id));
+      await loadUserData(user.uid);
+    } catch (error) {
+      console.error('Delete error:', error);
     }
-    setAutoPilotQueue([]);
-    setCurrentProduction(null);
   };
 
   useEffect(() => {
     return () => {
-      if (autoPilotInterval.current) {
-        clearInterval(autoPilotInterval.current);
-      }
+      if (autoScanInterval.current) clearInterval(autoScanInterval.current);
+      if (schedulerInterval.current) clearInterval(schedulerInterval.current);
     };
   }, []);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
-        <Loader className="animate-spin text-purple-400" size={48} />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <Loader className="animate-spin text-blue-600" size={48} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
-      <header className="border-b border-purple-500/30 backdrop-blur-sm bg-black/20">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Zap className="text-purple-400" size={32} />
-            <h1 className="text-2xl font-bold">BrutusAI Pilot</h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="container mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-xl">
+              <Zap className="text-white" size={24} />
+            </div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              BrutusAi
+            </h1>
           </div>
           <div className="flex items-center gap-4">
+            <button className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg font-semibold hover:shadow-lg transition flex items-center gap-2">
+              <Play size={16} />Start Auto
+            </button>
             {userProfile.tier === 'pro' ? (
-              <div className="flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full">
-                <Crown size={16} />
-                <span className="text-sm font-bold">PRO</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-yellow-400 to-orange-400 rounded-full shadow">
+                <Crown size={16} className="text-white" />
+                <span className="text-sm font-bold text-white">PRO</span>
               </div>
             ) : (
-              <div className="text-sm">
-                <span className="text-gray-400">Credits: </span>
-                <span className="font-bold text-purple-400">{userProfile.creditsRemaining}</span>
+              <div className="text-sm font-medium text-gray-600">
+                Credits: <span className="text-blue-600 font-bold">{userProfile.creditsRemaining}</span>
               </div>
             )}
-            <button onClick={() => setActiveTab('profile')} className="p-2 hover:bg-white/10 rounded-lg transition">
-              <User size={20} />
-            </button>
           </div>
         </div>
       </header>
 
-      <nav className="border-b border-purple-500/30 backdrop-blur-sm bg-black/20">
-        <div className="container mx-auto px-4">
+      {/* Navigation */}
+      <nav className="bg-white border-b border-gray-200">
+        <div className="container mx-auto px-6">
           <div className="flex gap-1">
             {[
-              { id: 'trends', label: 'Trend Spy', icon: TrendingUp },
-              { id: 'planner', label: 'Content Planner', icon: BarChart3 },
-              { id: 'tracking', label: 'Tracking', icon: Eye },
-              { id: 'profile', label: 'Profile', icon: User }
+              { id: 'studio', label: 'Studio', icon: Zap },
+              { id: 'planer', label: 'Planer', icon: Calendar },
+              { id: 'tracking', label: 'Tracking', icon: BarChart3 },
+              { id: 'profil', label: 'Profil', icon: User }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition ${
-                  activeTab === tab.id ? 'border-purple-400 text-purple-400' : 'border-transparent text-gray-400 hover:text-white'
+                className={`flex items-center gap-2 px-6 py-4 border-b-2 transition font-medium ${
+                  activeTab === tab.id 
+                    ? 'border-blue-600 text-blue-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
                 <tab.icon size={18} />
@@ -327,169 +350,299 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="container mx-auto px-4 py-8">
-        {activeTab === 'trends' && (
-          <TrendSpyTab
-            topic={topic} setTopic={setTopic} category={category} setCategory={setCategory}
-            analyzeTrends={analyzeTrends} analyzing={analyzingTrends} concepts={concepts}
-            saveDraft={saveDraft} produceVideo={produceVideo}
-            autoPilotActive={autoPilotActive} startAutoPilot={startAutoPilot} stopAutoPilot={stopAutoPilot}
-            currentProduction={currentProduction} queueLength={autoPilotQueue.length}
+      {/* Main Content */}
+      <main className="container mx-auto px-6 py-8">
+        {activeTab === 'studio' && (
+          <StudioTab 
+            scanningMode={scanningMode}
+            setScanningMode={setScanningMode}
+            currentStrategy={currentStrategy}
+            setCurrentStrategy={setCurrentStrategy}
+            autoScanActive={autoScanActive}
+            startAutoScan={startAutoScan}
+            stopAutoScan={stopAutoScan}
+            scanCustomTrends={scanCustomTrends}
+            trends={trends}
+            produceAndUpload={produceAndUpload}
+            schedulePost={schedulePost}
           />
         )}
-        {activeTab === 'planner' && <ContentPlannerTab drafts={drafts} deleteDraft={deleteDraft} produceVideo={produceVideo} />}
+        {activeTab === 'planer' && (
+          <PlanerTab
+            schedulerActive={schedulerActive}
+            scheduleInterval={scheduleInterval}
+            setScheduleInterval={setScheduleInterval}
+            scheduleTime={scheduleTime}
+            setScheduleTime={setScheduleTime}
+            startScheduler={startScheduler}
+            stopScheduler={stopScheduler}
+            scheduledPosts={scheduledPosts}
+            deleteScheduled={deleteScheduled}
+            produceAndUpload={produceAndUpload}
+          />
+        )}
         {activeTab === 'tracking' && <TrackingTab published={published} />}
-        {activeTab === 'profile' && <ProfileTab userProfile={userProfile} onUpgrade={() => setShowPaymentModal(true)} />}
+        {activeTab === 'profil' && <ProfilTab userProfile={userProfile} />}
       </main>
-
-      {showPaymentModal && <GooglePayModal onClose={() => setShowPaymentModal(false)} user={user} onSuccess={async () => {
-        setUserProfile(prev => ({ ...prev, tier: 'pro', creditsRemaining: 999999 }));
-        if (user && db) {
-          await setDoc(doc(db, `artifacts/${appId}/users/${user.uid}/profile`, 'data'), {
-            tier: 'pro',
-            creditsRemaining: 999999
-          }, { merge: true });
-        }
-        setShowPaymentModal(false);
-        alert('Welcome to PRO! You now have unlimited credits.');
-      }} />}
     </div>
   );
 }
 
-function TrendSpyTab({ topic, setTopic, category, setCategory, analyzeTrends, analyzing, concepts, saveDraft, produceVideo, autoPilotActive, startAutoPilot, stopAutoPilot, currentProduction, queueLength }) {
+// === STUDIO TAB ===
+function StudioTab({ scanningMode, setScanningMode, currentStrategy, setCurrentStrategy, autoScanActive, startAutoScan, stopAutoScan, scanCustomTrends, trends, produceAndUpload, schedulePost }) {
   return (
     <div className="space-y-6">
-      <div className="bg-black/40 backdrop-blur-sm rounded-xl p-6 border border-purple-500/30">
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <TrendingUp className="text-purple-400" />
-          Analyze Viral Trends
-        </h2>
-        
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">Topic</label>
-            <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g., AI, Crypto, Fitness" className="w-full px-4 py-2 bg-white/5 border border-purple-500/30 rounded-lg focus:border-purple-400 outline-none" />
-          </div>
-          
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">Category</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-4 py-2 bg-white/5 border border-purple-500/30 rounded-lg focus:border-purple-400 outline-none">
-              <option value="Tech">Tech</option>
-              <option value="Finance">Finance</option>
-              <option value="Lifestyle">Lifestyle</option>
-              <option value="Education">Education</option>
-              <option value="Entertainment">Entertainment</option>
-            </select>
-          </div>
+      {/* Scan Mode Tabs */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="flex border-b border-gray-200">
+          <button
+            onClick={() => setScanningMode('auto')}
+            className={`flex-1 px-6 py-3 font-semibold transition ${
+              scanningMode === 'auto' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Auto
+          </button>
+          <button
+            onClick={() => setScanningMode('custom')}
+            className={`flex-1 px-6 py-3 font-semibold transition ${
+              scanningMode === 'custom' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Custom
+          </button>
         </div>
 
-        <button onClick={analyzeTrends} disabled={analyzing} className="mt-4 w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg font-bold hover:scale-105 transition disabled:opacity-50 flex items-center justify-center gap-2">
-          {analyzing ? <><Loader className="animate-spin" size={20} />Analyzing...</> : <><TrendingUp size={20} />Analyze Trends</>}
-        </button>
+        <div className="p-6">
+          {scanningMode === 'auto' ? (
+            <div>
+              <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-8 text-white mb-6">
+                <div className="flex items-start gap-4">
+                  <div className="bg-white/20 p-3 rounded-xl">
+                    <TrendingUp size={32} />
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-bold mb-2">Trend Spy AI</h2>
+                    <p className="text-blue-100 mb-4">
+                      Analysiert virale Signale für deine Nische.
+                    </p>
+                    {autoScanActive ? (
+                      <button
+                        onClick={stopAutoScan}
+                        className="px-6 py-3 bg-white text-blue-600 rounded-xl font-bold hover:shadow-lg transition flex items-center gap-2"
+                      >
+                        <Pause size={20} />Stoppen
+                      </button>
+                    ) : (
+                      <button
+                        onClick={startAutoScan}
+                        className="px-6 py-3 bg-white text-blue-600 rounded-xl font-bold hover:shadow-lg transition flex items-center gap-2"
+                      >
+                        <Play size={20} />Auto-Scan starten
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {autoScanActive && (
+                <div className="flex items-center gap-2 text-green-600 font-medium">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  Scannt automatisch jede Stunde...
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <Settings className="inline mr-2" size={16} />Strategie
+                </label>
+                <input
+                  type="text"
+                  value={currentStrategy}
+                  onChange={(e) => setCurrentStrategy(e.target.value)}
+                  placeholder="Aktueller Teknus..."
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <button
+                onClick={scanCustomTrends}
+                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold hover:shadow-lg transition"
+              >
+                Strategie Update
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {concepts.length > 0 && (
-        <>
-          <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 backdrop-blur-sm rounded-xl p-6 border border-orange-500/30">
-            <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
-              <Zap className="text-orange-400" />
-              Auto-Pilot Mode
-            </h3>
-            <p className="text-sm text-gray-300 mb-4">Automatically produce all concepts. One video every 10 seconds.</p>
-            
-            {currentProduction && (
-              <div className="mb-4 p-3 bg-black/40 rounded-lg">
-                <p className="text-sm text-gray-400">Currently producing:</p>
-                <p className="font-bold text-purple-400">{currentProduction.title}</p>
-              </div>
-            )}
-
-            {autoPilotActive && <div className="mb-4 text-sm text-gray-400">Queue: <span className="text-purple-400 font-bold">{queueLength}</span> videos</div>}
-
-            <button onClick={autoPilotActive ? stopAutoPilot : startAutoPilot} className={`w-full px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition ${autoPilotActive ? 'bg-red-600 hover:bg-red-700' : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:scale-105'}`}>
-              {autoPilotActive ? <><Pause size={20} />Stop Auto-Pilot</> : <><Play size={20} />Start Auto-Pilot</>}
-            </button>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2">
-            {concepts.map((concept, idx) => (
-              <div key={concept.id || idx} className="bg-black/40 backdrop-blur-sm rounded-xl border border-purple-500/30 overflow-hidden hover:border-purple-400 transition">
-                {concept.imageUrl && <img src={concept.imageUrl} alt={concept.title} className="w-full h-48 object-cover" />}
+      {/* Trends Display */}
+      {trends.length > 0 && (
+        <div>
+          <h3 className="text-lg font-bold text-gray-800 mb-4">
+            Noch keine Trends. Klicke "Scannen" oder "Strategie Update".
+          </h3>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {trends.map((trend, idx) => (
+              <div key={trend.id || idx} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition">
+                {trend.imageUrl && (
+                  <img src={trend.imageUrl} alt={trend.title} className="w-full h-40 object-cover" />
+                )}
                 <div className="p-4 space-y-3">
-                  <h3 className="font-bold text-lg">{concept.title}</h3>
-                  <p className="text-sm text-gray-400">{concept.hook}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {concept.tags?.map((tag, i) => <span key={i} className="px-2 py-1 bg-purple-500/20 rounded text-xs">#{tag}</span>)}
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <button onClick={() => saveDraft(concept)} className="flex-1 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg transition text-sm flex items-center justify-center gap-2">
-                      <Plus size={16} />Save Draft
+                  <h4 className="font-bold text-gray-800">{trend.title}</h4>
+                  <p className="text-sm text-gray-600 line-clamp-2">{trend.hook}</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => schedulePost(trend)}
+                      className="flex-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1"
+                    >
+                      <Calendar size={14} />Planen
                     </button>
-                    <button onClick={() => produceVideo(concept)} className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:scale-105 rounded-lg transition text-sm font-bold flex items-center justify-center gap-2">
-                      <Play size={16} />Produce
+                    <button
+                      onClick={() => produceAndUpload(trend)}
+                      className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-sm font-bold hover:shadow-lg transition flex items-center justify-center gap-1"
+                    >
+                      <Play size={14} />Produzieren
                     </button>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
     </div>
   );
 }
 
-function ContentPlannerTab({ drafts, deleteDraft, produceVideo }) {
+// === PLANER TAB ===
+function PlanerTab({ schedulerActive, scheduleInterval, setScheduleInterval, scheduleTime, setScheduleTime, startScheduler, stopScheduler, scheduledPosts, deleteScheduled, produceAndUpload }) {
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Content Planner</h2>
-      {drafts.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <BarChart3 size={48} className="mx-auto mb-4 opacity-50" />
-          <p>No drafts yet. Save concepts from Trend Spy!</p>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <Calendar className="text-blue-600" />Automatischer Planer
+        </h2>
+        
+        <div className="grid md:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Intervall</label>
+            <select
+              value={scheduleInterval}
+              onChange={(e) => setScheduleInterval(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="daily">Täglich</option>
+              <option value="weekly">Wöchentlich</option>
+              <option value="monthly">Monatlich</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Uhrzeit</label>
+            <input
+              type="time"
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
+          <div className="flex items-end">
+            {schedulerActive ? (
+              <button
+                onClick={stopScheduler}
+                className="w-full px-6 py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition flex items-center justify-center gap-2"
+              >
+                <Pause size={20} />Stoppen
+              </button>
+            ) : (
+              <button
+                onClick={startScheduler}
+                className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2"
+              >
+                <Play size={20} />Starten
+              </button>
+            )}
+          </div>
         </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {drafts.map(draft => (
-            <div key={draft.id} className="bg-black/40 backdrop-blur-sm rounded-xl p-4 border border-purple-500/30">
-              {draft.imageUrl && <img src={draft.imageUrl} alt={draft.title} className="w-full h-32 object-cover rounded-lg mb-3" />}
-              <h3 className="font-bold mb-2">{draft.title}</h3>
-              <p className="text-sm text-gray-400 mb-3 line-clamp-2">{draft.hook}</p>
-              <div className="flex gap-2">
-                <button onClick={() => produceVideo(draft)} className="flex-1 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg text-sm font-bold hover:scale-105 transition">Produce</button>
-                <button onClick={() => deleteDraft(draft.id)} className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition"><Trash2 size={16} /></button>
+
+        {schedulerActive && (
+          <div className="flex items-center gap-2 text-green-600 font-medium bg-green-50 px-4 py-2 rounded-lg">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            Scheduler aktiv - Postet automatisch {scheduleInterval === 'daily' ? 'täglich' : scheduleInterval === 'weekly' ? 'wöchentlich' : 'monatlich'} um {scheduleTime} Uhr
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">Geplante Posts</h3>
+        {scheduledPosts.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">Keine geplanten Posts</p>
+        ) : (
+          <div className="space-y-3">
+            {scheduledPosts.map(post => (
+              <div key={post.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                {post.imageUrl && (
+                  <img src={post.imageUrl} alt={post.title} className="w-16 h-16 object-cover rounded-lg" />
+                )}
+                <div className="flex-1">
+                  <h4 className="font-bold text-gray-800">{post.title}</h4>
+                  <p className="text-sm text-gray-600">
+                    <Clock size={12} className="inline mr-1" />
+                    {new Date(post.scheduledFor).toLocaleString('de-DE')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => produceAndUpload(post)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                  <Upload size={16} />
+                </button>
+                <button
+                  onClick={() => deleteScheduled(post.id)}
+                  className="px-4 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
+// === TRACKING TAB ===
 function TrackingTab({ published }) {
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Published Videos</h2>
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+      <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+        <BarChart3 className="text-blue-600" />Veröffentlichte Videos
+      </h2>
       {published.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Eye size={48} className="mx-auto mb-4 opacity-50" />
-          <p>No published videos yet. Start producing!</p>
-        </div>
+        <p className="text-gray-500 text-center py-12">Noch keine Videos veröffentlicht</p>
       ) : (
         <div className="space-y-4">
           {published.map(video => (
-            <div key={video.id} className="bg-black/40 backdrop-blur-sm rounded-xl p-4 border border-purple-500/30 flex gap-4">
-              {video.imageUrl && <img src={video.imageUrl} alt={video.title} className="w-32 h-32 object-cover rounded-lg" />}
+            <div key={video.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-md transition">
+              {video.imageUrl && (
+                <img src={video.imageUrl} alt={video.title} className="w-24 h-24 object-cover rounded-lg" />
+              )}
               <div className="flex-1">
-                <h3 className="font-bold mb-1">{video.title}</h3>
-                <p className="text-sm text-gray-400 mb-3">{video.hook}</p>
+                <h3 className="font-bold text-gray-800 mb-1">{video.title}</h3>
+                <p className="text-sm text-gray-600 mb-2">{video.hook}</p>
                 <div className="flex gap-4 text-sm">
-                  <span className="flex items-center gap-1"><Eye size={14} className="text-purple-400" />{video.views || 0} views</span>
-                  <span className="flex items-center gap-1">❤️ {video.likes || 0} likes</span>
-                  <span className={`flex items-center gap-1 ${video.status === 'published' ? 'text-green-400' : video.status === 'processing' ? 'text-yellow-400' : 'text-gray-400'}`}>
-                    {video.status === 'published' ? <CheckCircle size={14} /> : video.status === 'processing' ? <Clock size={14} /> : <XCircle size={14} />}
+                  <span className="flex items-center gap-1 text-gray-600">
+                    <Eye size={14} className="text-blue-500" />{video.views || 0} Views
+                  </span>
+                  <span className="flex items-center gap-1 text-gray-600">
+                    ❤️ {video.likes || 0} Likes
+                  </span>
+                  <span className={`flex items-center gap-1 font-medium ${
+                    video.status === 'published' ? 'text-green-600' : 
+                    video.status === 'processing' ? 'text-yellow-600' : 'text-gray-600'
+                  }`}>
+                    {video.status === 'published' ? <CheckCircle size={14} /> : <Clock size={14} />}
                     {video.status}
                   </span>
                 </div>
@@ -502,205 +655,58 @@ function TrackingTab({ published }) {
   );
 }
 
-function ProfileTab({ userProfile, onUpgrade }) {
+// === PROFIL TAB ===
+function ProfilTab({ userProfile }) {
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Profile</h2>
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="bg-black/40 backdrop-blur-sm rounded-xl p-6 border border-purple-500/30">
-          <h3 className="text-lg font-bold mb-4">Account Tier</h3>
-          {userProfile.tier === 'pro' ? (
-            <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-lg border border-yellow-500/30">
-              <Crown className="text-yellow-400" size={32} />
-              <div>
-                <p className="font-bold text-yellow-400">PRO Member</p>
-                <p className="text-sm text-gray-300">Unlimited credits</p>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+        <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+          <User className="text-blue-600" />Account Status
+        </h2>
+        
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="p-6 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border border-blue-200">
+            <h3 className="font-bold text-gray-800 mb-4">Mitgliedschaft</h3>
+            {userProfile.tier === 'pro' ? (
+              <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-yellow-400 to-orange-400 rounded-xl">
+                <Crown className="text-white" size={32} />
+                <div>
+                  <p className="font-bold text-white">PRO Member</p>
+                  <p className="text-sm text-white/90">Unlimited Credits</p>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="p-4 bg-white/5 rounded-lg">
-                <p className="text-gray-400">Free Tier</p>
-                <p className="text-2xl font-bold text-purple-400">{userProfile.creditsRemaining} credits</p>
-              </div>
-              <button onClick={onUpgrade} className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-lg font-bold hover:scale-105 transition flex items-center justify-center gap-2">
-                <Crown size={20} />Upgrade to PRO - 9,99€/month
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="bg-black/40 backdrop-blur-sm rounded-xl p-6 border border-purple-500/30">
-          <h3 className="text-lg font-bold mb-4">Statistics</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between"><span className="text-gray-400">Videos Produced</span><span className="font-bold text-purple-400">{userProfile.videosProduced}</span></div>
-            <div className="flex justify-between"><span className="text-gray-400">Total Views</span><span className="font-bold text-purple-400">0</span></div>
-            <div className="flex justify-between"><span className="text-gray-400">Total Likes</span><span className="font-bold text-purple-400">0</span></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function GooglePayModal({ onClose, user, onSuccess }) {
-  const [processing, setProcessing] = useState(false);
-  const [paymentReady, setPaymentReady] = useState(false);
-
-  useEffect(() => {
-    // Load Google Pay API
-    const script = document.createElement('script');
-    script.src = 'https://pay.google.com/gp/p/js/pay.js';
-    script.async = true;
-    script.onload = () => {
-      initGooglePay();
-    };
-    document.body.appendChild(script);
-    
-    return () => {
-      document.body.removeChild(script);
-    };
-  }, []);
-
-  const initGooglePay = () => {
-    if (typeof google === 'undefined' || !google.payments) return;
-
-    const paymentsClient = new google.payments.api.PaymentsClient({
-      environment: 'TEST' // Change to 'PRODUCTION' for live
-    });
-
-    const isReadyToPayRequest = {
-      apiVersion: 2,
-      apiVersionMinor: 0,
-      allowedPaymentMethods: [{
-        type: 'CARD',
-        parameters: {
-          allowedAuthMethods: ['PAN_ONLY', 'CRYPTOGRAM_3DS'],
-          allowedCardNetworks: ['MASTERCARD', 'VISA']
-        }
-      }]
-    };
-
-    paymentsClient.isReadyToPay(isReadyToPayRequest)
-      .then(response => {
-        if (response.result) {
-          setPaymentReady(true);
-        }
-      })
-      .catch(err => console.error('Google Pay init error:', err));
-  };
-
-  const handleGooglePay = async () => {
-    if (typeof google === 'undefined' || !google.payments) {
-      alert('Google Pay not available');
-      return;
-    }
-
-    setProcessing(true);
-
-    const paymentsClient = new google.payments.api.PaymentsClient({
-      environment: 'TEST'
-    });
-
-    const paymentDataRequest = {
-      apiVersion: 2,
-      apiVersionMinor: 0,
-      allowedPaymentMethods: [{
-        type: 'CARD',
-        parameters: {
-          allowedAuthMethods: ['PAN_ONLY', 'CRYPTOGRAM_3DS'],
-          allowedCardNetworks: ['MASTERCARD', 'VISA']
-        },
-        tokenizationSpecification: {
-          type: 'PAYMENT_GATEWAY',
-          parameters: {
-            gateway: 'example',
-            gatewayMerchantId: 'exampleMerchantId'
-          }
-        }
-      }],
-      merchantInfo: {
-        merchantName: 'BrutusAI Pilot',
-        merchantId: '12345678901234567890'
-      },
-      transactionInfo: {
-        totalPriceStatus: 'FINAL',
-        totalPrice: '9.99',
-        currencyCode: 'EUR',
-        countryCode: 'DE'
-      }
-    };
-
-    try {
-      const paymentData = await paymentsClient.loadPaymentData(paymentDataRequest);
-      console.log('Payment successful:', paymentData);
-      
-      // In production, send paymentData to your backend for verification
-      await onSuccess();
-    } catch (err) {
-      console.error('Payment failed:', err);
-      setProcessing(false);
-      if (err.statusCode !== 'CANCELED') {
-        alert('Payment failed. Please try again.');
-      }
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl p-8 max-w-md w-full border border-purple-500/30 relative">
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white">
-          <XCircle size={24} />
-        </button>
-
-        <div className="text-center mb-6">
-          <Crown className="text-yellow-400 mx-auto mb-4" size={64} />
-          <h2 className="text-3xl font-bold mb-2">Upgrade to PRO</h2>
-          <p className="text-gray-400">Unlock unlimited video production</p>
-        </div>
-
-        <div className="bg-black/40 rounded-xl p-6 mb-6 border border-purple-500/30">
-          <div className="flex justify-between items-center mb-4">
-            <span className="text-lg">PRO Subscription</span>
-            <span className="text-2xl font-bold text-purple-400">9,99€</span>
-          </div>
-          <div className="text-sm text-gray-400 space-y-2">
-            <div className="flex items-center gap-2"><CheckCircle size={16} className="text-green-400" />Unlimited credits</div>
-            <div className="flex items-center gap-2"><CheckCircle size={16} className="text-green-400" />Unlimited video production</div>
-            <div className="flex items-center gap-2"><CheckCircle size={16} className="text-green-400" />Priority support</div>
-            <div className="flex items-center gap-2"><CheckCircle size={16} className="text-green-400" />Early access to new features</div>
-          </div>
-        </div>
-
-        {paymentReady ? (
-          <button 
-            onClick={handleGooglePay}
-            disabled={processing}
-            className="w-full bg-white text-black font-bold py-4 rounded-xl hover:bg-gray-100 transition flex items-center justify-center gap-3 disabled:opacity-50"
-          >
-            {processing ? (
-              <Loader className="animate-spin" size={20} />
             ) : (
-              <>
-                <svg viewBox="0 0 50 20" className="h-5">
-                  <path fill="#4285F4" d="M19.7 10c0-.6-.1-1.2-.2-1.8H10v3.4h5.4c-.2 1.2-1 2.2-2.1 2.9v2.2h3.4c2-1.8 3-4.5 3-6.7z"/>
-                  <path fill="#34A853" d="M10 20c2.8 0 5.1-1 6.8-2.6l-3.4-2.6c-1 .6-2.2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H.8v2.7C2.5 18 6 20 10 20z"/>
-                  <path fill="#FBBC04" d="M4.4 12.1c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V5.4H.8C.3 6.4 0 7.7 0 9s.3 2.6.8 3.7l3.6-2.6z"/>
-                  <path fill="#EA4335" d="M10 4c1.5 0 2.8.5 3.9 1.5l2.9-2.9C15.1 1 12.8 0 10 0 6 0 2.5 2 .8 5.4l3.6 2.7C5.2 5.8 7.4 4 10 4z"/>
-                </svg>
-                Pay with Google Pay
-              </>
+              <div className="space-y-4">
+                <div className="p-4 bg-white rounded-xl">
+                  <p className="text-gray-600 text-sm mb-1">Free Tier</p>
+                  <p className="text-3xl font-bold text-blue-600">{userProfile.creditsRemaining}</p>
+                  <p className="text-sm text-gray-500">Credits verbleibend</p>
+                </div>
+                <button className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl font-bold hover:shadow-lg transition flex items-center justify-center gap-2">
+                  <Crown size={20} />Upgrade zu PRO - 9,99€/Monat
+                </button>
+              </div>
             )}
-          </button>
-        ) : (
-          <div className="text-center py-4 text-gray-400">
-            <Loader className="animate-spin mx-auto mb-2" size={24} />
-            Loading Google Pay...
           </div>
-        )}
 
-        <p className="text-xs text-gray-500 text-center mt-4">
-          Secure payment powered by Google Pay. Cancel anytime.
-        </p>
+          <div className="p-6 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border border-blue-200">
+            <h3 className="font-bold text-gray-800 mb-4">Statistiken</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center p-3 bg-white rounded-xl">
+                <span className="text-gray-600">Videos produziert</span>
+                <span className="text-2xl font-bold text-blue-600">{userProfile.videosProduced}</span>
+              </div>
+              <div className="flex justify-between items-center p-3 bg-white rounded-xl">
+                <span className="text-gray-600">Gesamt Views</span>
+                <span className="text-2xl font-bold text-blue-600">0</span>
+              </div>
+              <div className="flex justify-between items-center p-3 bg-white rounded-xl">
+                <span className="text-gray-600">Gesamt Likes</span>
+                <span className="text-2xl font-bold text-blue-600">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
