@@ -2,6 +2,7 @@
   "name": "brutus-ai-frontend",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -22,6 +23,8 @@
     "tailwind-merge": "^2.5.5"
   },
   "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.49",

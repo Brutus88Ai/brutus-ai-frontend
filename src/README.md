@@ -86,6 +86,7 @@ Siehe [SECURITY.md](./SECURITY.md) für vollständige Checkliste.
 
 ```bash
 VITE_GEMINI_API_KEY=your_key_here
+VITE_MAKE_WEBHOOK_URL=https://hook.make.com/...
 VITE_API_ENDPOINT=https://api.brutus-ai.de
 VITE_SUPPORT_EMAIL=brutusaiswebapp@gmail.com
 ```

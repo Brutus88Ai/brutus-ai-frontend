@@ -3,7 +3,7 @@
  * Führt alle kritischen Tests durch
  */
 
-import { validateApiKey, sanitizeInput, validateEmail, validatePassword } from './lib/security.js';
+import { validateApiKey, sanitizeInput, validateEmail, validatePassword } from '../lib/security.js';
 
 // Test Results
 const testResults = {

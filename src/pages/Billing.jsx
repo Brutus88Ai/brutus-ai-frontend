@@ -11,11 +11,13 @@ import {
   Calendar,
   ArrowRight,
   Building2,
-  Banknote
+  Banknote,
+  Sparkles,
+  Crown
 } from "lucide-react";
 import { useState } from "react";
 
-const GEMINI_API_KEY = "AIzaSyAkjhVi57D95fNTT6PdLGKhE0S2eOZU7w0";
+const GEMINI_API_KEY = "AIzaSyD7W9BzMGKrVnaIa2fXA7lNCo9BYh_WPsQ";
 
 export default function Billing() {
   const [selectedPlan, setSelectedPlan] = useState('monthly');
@@ -28,6 +30,7 @@ export default function Billing() {
       price: "9.99",
       period: "/Woche",
       savings: "",
+      gradient: "from-blue-500 to-cyan-600",
       features: [
         "Unbegrenzte Trend-Analysen",
         "50 AI-generierte Videos/Woche",
@@ -43,6 +46,7 @@ export default function Billing() {
       period: "/Monat",
       savings: "25% Ersparnis",
       popular: true,
+      gradient: "from-purple-500 to-pink-600",
       features: [
         "Alles aus Wöchentlich",
         "200 AI-generierte Videos/Monat",
@@ -58,6 +62,7 @@ export default function Billing() {
       price: "249.99",
       period: "/Jahr",
       savings: "50% Ersparnis",
+      gradient: "from-yellow-500 to-orange-600",
       features: [
         "Alles aus Monatlich",
         "Unbegrenzte AI-Videos",
@@ -78,131 +83,148 @@ export default function Billing() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Abrechnung & Zahlungen</h1>
-        <p className="text-muted-foreground">
-          Verwalte dein Abonnement und Auszahlungen
-        </p>
+      {/* Header */}
+      <div className="flex items-start gap-4">
+        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-500/30">
+          <Wallet className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">Abrechnung & Zahlungen</h1>
+          <p className="text-slate-400 mt-1">
+            Verwalte dein Abonnement und Auszahlungen
+          </p>
+        </div>
       </div>
 
       {/* Earnings Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="p-6 bg-gradient-card shadow-card border-border">
-          <div className="flex items-start justify-between mb-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-6 bg-slate-800/30 border-slate-700/50 hover:border-green-500/30 transition-all duration-300">
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-sm text-muted-foreground">Diese Woche</p>
-              <p className="text-2xl font-bold text-foreground mt-1">${earnings.thisWeek}</p>
+              <p className="text-sm text-slate-400 font-medium">Diese Woche</p>
+              <p className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent mt-1">${earnings.thisWeek}</p>
             </div>
-            <div className="p-3 rounded-lg bg-success/20">
-              <TrendingUp className="w-5 h-5 text-success" />
+            <div className="p-3 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30">
+              <TrendingUp className="w-5 h-5 text-green-400" />
             </div>
           </div>
-          <p className="text-xs text-success">+12.5% vs letzte Woche</p>
+          <p className="text-xs text-green-400 font-semibold">+12.5% vs letzte Woche</p>
         </Card>
 
-        <Card className="p-6 bg-gradient-card shadow-card border-border">
-          <div className="flex items-start justify-between mb-2">
+        <Card className="p-6 bg-slate-800/30 border-slate-700/50 hover:border-blue-500/30 transition-all duration-300">
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-sm text-muted-foreground">Dieser Monat</p>
-              <p className="text-2xl font-bold text-foreground mt-1">${earnings.thisMonth}</p>
+              <p className="text-sm text-slate-400 font-medium">Dieser Monat</p>
+              <p className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mt-1">${earnings.thisMonth}</p>
             </div>
-            <div className="p-3 rounded-lg bg-primary/20">
-              <Calendar className="w-5 h-5 text-primary" />
+            <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30">
+              <Calendar className="w-5 h-5 text-blue-400" />
             </div>
           </div>
-          <p className="text-xs text-primary">+8.3% vs letzter Monat</p>
+          <p className="text-xs text-blue-400 font-semibold">+8.3% vs letzter Monat</p>
         </Card>
 
-        <Card className="p-6 bg-gradient-card shadow-card border-border">
-          <div className="flex items-start justify-between mb-2">
+        <Card className="p-6 bg-slate-800/30 border-slate-700/50 hover:border-yellow-500/30 transition-all duration-300">
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-sm text-muted-foreground">Ausstehend</p>
-              <p className="text-2xl font-bold text-foreground mt-1">${earnings.pending}</p>
+              <p className="text-sm text-slate-400 font-medium">Ausstehend</p>
+              <p className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent mt-1">${earnings.pending}</p>
             </div>
-            <div className="p-3 rounded-lg bg-warning/20">
-              <Wallet className="w-5 h-5 text-warning" />
+            <div className="p-3 rounded-lg bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/30">
+              <Wallet className="w-5 h-5 text-yellow-400" />
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Auszahlung in 3 Tagen</p>
+          <p className="text-xs text-slate-400">Auszahlung in 3 Tagen</p>
         </Card>
 
-        <Card className="p-6 bg-gradient-card shadow-card border-border">
-          <div className="flex items-start justify-between mb-2">
+        <Card className="p-6 bg-slate-800/30 border-slate-700/50 hover:border-purple-500/30 transition-all duration-300">
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <p className="text-sm text-muted-foreground">Gesamt</p>
-              <p className="text-2xl font-bold text-foreground mt-1">${earnings.lifetime}</p>
+              <p className="text-sm text-slate-400 font-medium">Gesamt</p>
+              <p className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mt-1">${earnings.lifetime}</p>
             </div>
-            <div className="p-3 rounded-lg bg-primary/20">
-              <DollarSign className="w-5 h-5 text-primary" />
+            <div className="p-3 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+              <DollarSign className="w-5 h-5 text-purple-400" />
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Lifetime Earnings</p>
+          <p className="text-xs text-slate-400">Lifetime Earnings</p>
         </Card>
       </div>
 
       {/* Subscription Plans */}
       <div>
-        <h2 className="text-2xl font-bold text-foreground mb-4">Wähle dein Abo</h2>
+        <div className="flex items-center gap-3 mb-6">
+          <Crown className="w-6 h-6 text-yellow-400" />
+          <h2 className="text-2xl font-bold text-slate-100">Wähle dein Abo</h2>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {plans.map((plan) => (
             <Card
               key={plan.value}
-              className={`p-6 bg-gradient-card border-2 transition-all duration-300 ${
+              className={`relative p-6 bg-slate-800/30 border-2 transition-all duration-300 hover:scale-105 ${
                 selectedPlan === plan.value
-                  ? 'border-primary shadow-glow'
+                  ? 'border-purple-500/50 shadow-lg shadow-purple-500/20'
                   : plan.popular
-                  ? 'border-primary/50'
-                  : 'border-border'
+                  ? 'border-pink-500/50 shadow-lg shadow-pink-500/20'
+                  : 'border-slate-700/50'
               }`}
             >
-              {plan.popular && (
-                <div className="mb-4">
-                  <span className="px-3 py-1 rounded-full bg-primary text-primary-foreground text-xs font-semibold">
-                    Beliebteste Wahl
-                  </span>
-                </div>
-              )}
+              {/* Gradient Overlay */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${plan.gradient} opacity-5 rounded-2xl`} />
               
-              <h3 className="text-xl font-bold text-foreground mb-2">{plan.name}</h3>
-              
-              <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-4xl font-bold text-foreground">${plan.price}</span>
-                <span className="text-muted-foreground">{plan.period}</span>
-              </div>
-              
-              {plan.savings && (
-                <p className="text-sm text-success font-semibold mb-4">{plan.savings}</p>
-              )}
-
-              <Button
-                onClick={() => setSelectedPlan(plan.value)}
-                className={`w-full mb-6 transition-all duration-300 ${
-                  selectedPlan === plan.value
-                    ? 'bg-primary hover:bg-primary/90'
-                    : 'bg-secondary hover:bg-secondary/80'
-                }`}
-              >
-                {selectedPlan === plan.value ? (
-                  <>
-                    <Check className="w-4 h-4 mr-2" />
-                    Ausgewählt
-                  </>
-                ) : (
-                  <>
-                    Auswählen
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </>
+              <div className="relative">
+                {plan.popular && (
+                  <div className="mb-4">
+                    <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-pink-500 to-rose-600 text-white text-xs font-bold shadow-lg">
+                      <Sparkles size={12} />
+                      Beliebteste Wahl
+                    </span>
+                  </div>
                 )}
-              </Button>
+                
+                <h3 className="text-xl font-bold text-slate-100 mb-3">{plan.name}</h3>
+                
+                <div className="flex items-baseline gap-1 mb-2">
+                  <span className={`text-5xl font-bold bg-gradient-to-r ${plan.gradient} bg-clip-text text-transparent`}>${plan.price}</span>
+                  <span className="text-slate-400">{plan.period}</span>
+                </div>
+                
+                {plan.savings && (
+                  <p className={`text-sm font-bold bg-gradient-to-r ${plan.gradient} bg-clip-text text-transparent mb-6`}>{plan.savings}</p>
+                )}
 
-              <ul className="space-y-3">
-                {plan.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                    <span className="text-sm text-muted-foreground">{feature}</span>
-                  </li>
-                ))}
-              </ul>
+                <Button
+                  onClick={() => setSelectedPlan(plan.value)}
+                  className={`w-full mb-6 font-medium rounded-xl py-6 transition-all duration-300 ${
+                    selectedPlan === plan.value
+                      ? `bg-gradient-to-r ${plan.gradient} text-white shadow-lg`
+                      : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 border border-slate-600/50'
+                  }`}
+                >
+                  {selectedPlan === plan.value ? (
+                    <>
+                      <Check className="w-5 h-5 mr-2" />
+                      Ausgewählt
+                    </>
+                  ) : (
+                    <>
+                      Auswählen
+                      <ArrowRight className="w-5 h-5 ml-2" />
+                    </>
+                  )}
+                </Button>
+
+                <ul className="space-y-3">
+                  {plan.features.map((feature, i) => (
+                    <li key={i} className="flex items-start gap-3">
+                      <div className={`h-5 w-5 rounded-full bg-gradient-to-r ${plan.gradient} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                        <Check className="w-3 h-3 text-white" />
+                      </div>
+                      <span className="text-sm text-slate-300">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </Card>
           ))}
         </div>
