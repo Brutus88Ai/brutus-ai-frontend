@@ -36,7 +36,7 @@ console.log('\n🔐 SECURITY TESTS\n');
 runTest('API Key Validation - Gemini', () => {
   // Test with a sample valid format key (not a real key)
   // Format: AIza + 35 alphanumeric characters = 39 total
-  const validFormatKey = 'AIzaSy123456789ABCDEFGHIJ012345678901';
+  const validFormatKey = 'AIzaSy123456789ABCDEFGHIJ01234567890123';
   const invalidKey = 'invalid_key_123';
   return validateApiKey(validFormatKey, 'gemini') && !validateApiKey(invalidKey, 'gemini');
 });

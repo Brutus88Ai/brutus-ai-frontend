@@ -78,7 +78,7 @@ function useMockContentResponse(res, trend, style, platform) {
       style,
       platform,
       generatedAt: new Date().toISOString(),
-      note: 'Mock-Daten - Bitte gültigen Gemini API Key in Settings hinterlegen'
+      note: 'Demo-Daten - Bitte gültigen Gemini API Key in den Einstellungen hinterlegen'
     }
   };
 
