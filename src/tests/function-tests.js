@@ -35,7 +35,8 @@ console.log('\n🔐 SECURITY TESTS\n');
 
 runTest('API Key Validation - Gemini', () => {
   // Test with a sample valid format key (not a real key)
-  const validFormatKey = 'AIzaSyExampleValidKeyFormat123456789';
+  // Format: AIza + 35 alphanumeric characters = 39 total
+  const validFormatKey = 'AIzaSy123456789ABCDEFGHIJ012345678901';
   const invalidKey = 'invalid_key_123';
   return validateApiKey(validFormatKey, 'gemini') && !validateApiKey(invalidKey, 'gemini');
 });
@@ -119,11 +120,12 @@ runTest('Gemini API Key format validation', () => {
   // Test that if GEMINI_API_KEY is set, it has the correct format
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
   // Pass if either: key is not set (optional config), or key has correct format
+  // Gemini API keys should be exactly 39 characters: AIza + 35 alphanumeric
   if (!GEMINI_API_KEY) {
     console.log('  ⚠️ GEMINI_API_KEY not configured (optional for dev mode)');
     return true;
   }
-  return GEMINI_API_KEY.startsWith('AIza') && GEMINI_API_KEY.length >= 30;
+  return GEMINI_API_KEY.startsWith('AIza') && GEMINI_API_KEY.length === 39;
 });
 
 // ==================== BILLING TESTS ====================
