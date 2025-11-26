@@ -2,8 +2,6 @@ import { Card } from "@/components/ui/card";
 import { TrendingUp, Video, Upload, CheckCircle, Sparkles, Calendar, BarChart3, Zap } from "lucide-react";
 import { useState, useEffect } from "react";
 
-const GEMINI_API_KEY = "AIzaSyD7W9BzMGKrVnaIa2fXA7lNCo9BYh_WPsQ";
-
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
 

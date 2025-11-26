@@ -17,8 +17,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-const GEMINI_API_KEY = "AIzaSyD7W9BzMGKrVnaIa2fXA7lNCo9BYh_WPsQ";
-
 export default function Billing() {
   const [selectedPlan, setSelectedPlan] = useState('monthly');
   const [payoutMethod, setPayoutMethod] = useState('bank');

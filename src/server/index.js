@@ -11,8 +11,13 @@ const PORT = process.env.PORT || 3001;
 // Trust proxy - wichtig für Nginx Reverse Proxy
 app.set('trust proxy', 1);
 
-// Gemini AI Setup
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'AIzaSyD7W9BzMGKrVnaIa2fXA7lNCo9BYh_WPsQ');
+// Gemini AI Setup - only initialize if API key is configured
+let genAI = null;
+if (process.env.GEMINI_API_KEY) {
+  genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+} else {
+  console.warn('⚠️ GEMINI_API_KEY not configured - AI features will use mock data');
+}
 
 // Middleware
 app.use(helmet({
@@ -58,6 +63,32 @@ const apiLimiter = rateLimit({
 app.use('/api/', limiter);
 app.use('/api/generate', apiLimiter);
 
+// Mock Content Response Helper
+function useMockContentResponse(res, trend, style, platform) {
+  const content = {
+    script: {
+      hook: `🔥 Hast du schon von ${trend} gehört? Das wird alles verändern!`,
+      main: `In diesem ${style} Video zeige ich dir, warum ${trend} der nächste große Trend auf ${platform} ist. Hier sind die wichtigsten Punkte, die du wissen musst...`,
+      cta: `👉 Folge für mehr ${trend} Content! Kommentiere "MEHR" für Teil 2!`
+    },
+    videoPrompt: `Create a dynamic ${style} video about ${trend} for ${platform}, with engaging visuals and text overlays`,
+    hashtags: ['#' + trend.replace(/\s+/g, ''), '#viral', '#trending', '#' + platform.toLowerCase(), '#contentcreator', '#socialmedia', '#2024'],
+    metadata: {
+      trend,
+      style,
+      platform,
+      generatedAt: new Date().toISOString(),
+      note: 'Demo-Daten - Bitte gültigen Gemini API Key in den Einstellungen hinterlegen'
+    }
+  };
+
+  return res.json({
+    success: true,
+    content,
+    warning: 'Demo-Modus: Bitte Gemini API Key in den Einstellungen aktualisieren'
+  });
+}
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -79,10 +110,13 @@ app.post('/api/generate/content', async (req, res) => {
       });
     }
 
-    // Check if Gemini API Key is valid
-    const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyAkjhVi57D95fNTT6PdLGKhE0S2eOZU7w0';
+    // Check if Gemini API is available
+    if (!genAI || !process.env.GEMINI_API_KEY) {
+      console.warn('⚠️ Gemini API not configured - using mock data');
+      return useMockContentResponse(res, trend, style, platform);
+    }
     
-    // Try Gemini AI first, fallback to mock if API key invalid
+    // Try Gemini AI first, fallback to mock if API fails
     try {
       const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
@@ -143,31 +177,9 @@ HASHTAGS: [Liste]
       });
 
     } catch (apiError) {
-      // Fallback: Mock Response wenn API Key ungültig
+      // Fallback: Mock Response wenn API fehlschlägt
       console.log('⚠️ Gemini API Error - Using Mock Data:', apiError.message);
-      
-      const content = {
-        script: {
-          hook: `🔥 Hast du schon von ${trend} gehört? Das wird alles verändern!`,
-          main: `In diesem ${style} Video zeige ich dir, warum ${trend} der nächste große Trend auf ${platform} ist. Hier sind die wichtigsten Punkte, die du wissen musst...`,
-          cta: `👉 Folge für mehr ${trend} Content! Kommentiere "MEHR" für Teil 2!`
-        },
-        videoPrompt: `Create a dynamic ${style} video about ${trend} for ${platform}, with engaging visuals and text overlays`,
-        hashtags: ['#' + trend.replace(/\s+/g, ''), '#viral', '#trending', '#' + platform.toLowerCase(), '#contentcreator', '#socialmedia', '#2024'],
-        metadata: {
-          trend,
-          style,
-          platform,
-          generatedAt: new Date().toISOString(),
-          note: 'Mock-Daten - Bitte gültigen Gemini API Key in Settings hinterlegen'
-        }
-      };
-
-      res.json({
-        success: true,
-        content,
-        warning: 'Demo-Modus: Bitte Gemini API Key in den Einstellungen aktualisieren'
-      });
+      return useMockContentResponse(res, trend, style, platform);
     }
 
   } catch (error) {

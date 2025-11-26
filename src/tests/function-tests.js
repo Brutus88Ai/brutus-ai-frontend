@@ -34,9 +34,11 @@ const runTest = (name, testFn) => {
 console.log('\n🔐 SECURITY TESTS\n');
 
 runTest('API Key Validation - Gemini', () => {
-  const validKey = 'AIzaSyAkjhVi57D95fNTT6PdLGKhE0S2eOZU7w0';
+  // Test with a sample valid format key (not a real key)
+  // Format: AIza + 35 alphanumeric characters = 39 total
+  const validFormatKey = 'AIzaSy123456789ABCDEFGHIJ01234567890123';
   const invalidKey = 'invalid_key_123';
-  return validateApiKey(validKey, 'gemini') && !validateApiKey(invalidKey, 'gemini');
+  return validateApiKey(validFormatKey, 'gemini') && !validateApiKey(invalidKey, 'gemini');
 });
 
 runTest('Input Sanitization - XSS Protection', () => {
@@ -114,9 +116,16 @@ components.forEach(component => {
 
 console.log('\n🌐 API INTEGRATION TESTS\n');
 
-runTest('Gemini API Key configured', () => {
-  const GEMINI_API_KEY = 'AIzaSyAkjhVi57D95fNTT6PdLGKhE0S2eOZU7w0';
-  return GEMINI_API_KEY && GEMINI_API_KEY.startsWith('AIza');
+runTest('Gemini API Key format validation', () => {
+  // Test that if GEMINI_API_KEY is set, it has the correct format
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+  // Pass if either: key is not set (optional config), or key has correct format
+  // Gemini API keys should be exactly 39 characters: AIza + 35 alphanumeric
+  if (!GEMINI_API_KEY) {
+    console.log('  ⚠️ GEMINI_API_KEY not configured (optional for dev mode)');
+    return true;
+  }
+  return GEMINI_API_KEY.startsWith('AIza') && GEMINI_API_KEY.length === 39;
 });
 
 // ==================== BILLING TESTS ====================

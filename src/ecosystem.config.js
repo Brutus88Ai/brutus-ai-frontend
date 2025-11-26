@@ -31,7 +31,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
-        GEMINI_API_KEY: 'AIzaSyD7W9BzMGKrVnaIa2fXA7lNCo9BYh_WPsQ',
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
         SUPPORT_EMAIL: 'brutusaiswebapp@gmail.com'
       },
       error_file: '/var/log/pm2/brutus-backend-error.log',
