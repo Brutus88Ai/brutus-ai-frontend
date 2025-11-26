@@ -5,8 +5,6 @@ import { Label } from "@/components/ui/label";
 import { Wand2, Sparkles, Copy, Zap, TrendingUp, Hash, Video } from "lucide-react";
 import { useState } from "react";
 
-const GEMINI_API_KEY = "AIzaSyD7W9BzMGKrVnaIa2fXA7lNCo9BYh_WPsQ";
-
 export default function ContentEngine() {
   const [generating, setGenerating] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState("TikTok");

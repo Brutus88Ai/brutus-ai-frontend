@@ -2,8 +2,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar, Plus, Clock, TrendingUp, Target, CalendarCheck } from "lucide-react";
 
-const GEMINI_API_KEY = "AIzaSyD7W9BzMGKrVnaIa2fXA7lNCo9BYh_WPsQ";
-
 export default function Planner() {
   const scheduledPosts = [
     { day: "Montag", posts: [{ time: "12:00", platform: "TikTok", content: "Tutorial Video" }] },

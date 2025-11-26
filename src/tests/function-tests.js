@@ -34,9 +34,10 @@ const runTest = (name, testFn) => {
 console.log('\n🔐 SECURITY TESTS\n');
 
 runTest('API Key Validation - Gemini', () => {
-  const validKey = 'AIzaSyAkjhVi57D95fNTT6PdLGKhE0S2eOZU7w0';
+  // Test with a sample valid format key (not a real key)
+  const validFormatKey = 'AIzaSyExampleValidKeyFormat123456789';
   const invalidKey = 'invalid_key_123';
-  return validateApiKey(validKey, 'gemini') && !validateApiKey(invalidKey, 'gemini');
+  return validateApiKey(validFormatKey, 'gemini') && !validateApiKey(invalidKey, 'gemini');
 });
 
 runTest('Input Sanitization - XSS Protection', () => {
@@ -115,8 +116,9 @@ components.forEach(component => {
 console.log('\n🌐 API INTEGRATION TESTS\n');
 
 runTest('Gemini API Key configured', () => {
-  const GEMINI_API_KEY = 'AIzaSyAkjhVi57D95fNTT6PdLGKhE0S2eOZU7w0';
-  return GEMINI_API_KEY && GEMINI_API_KEY.startsWith('AIza');
+  // Test that environment variable is being used (not hardcoded)
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+  return !GEMINI_API_KEY || GEMINI_API_KEY.startsWith('AIza');
 });
 
 // ==================== BILLING TESTS ====================

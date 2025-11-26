@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Settings as SettingsIcon, User, Bell, Key, Zap, Shield, Mail } from 'lucide-react';
 
 export default function Settings() {
-  const [geminiKey, setGeminiKey] = useState('AIzaSyD7W9BzMGKrVnaIa2fXA7lNCo9BYh_WPsQ');
+  const [geminiKey, setGeminiKey] = useState('');
   const [autoSettings, setAutoSettings] = useState({
     autoPosting: true,
     trendMonitoring: true,

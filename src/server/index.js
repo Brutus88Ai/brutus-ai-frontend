@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3001;
 app.set('trust proxy', 1);
 
 // Gemini AI Setup
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'AIzaSyD7W9BzMGKrVnaIa2fXA7lNCo9BYh_WPsQ');
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // Middleware
 app.use(helmet({
@@ -80,7 +80,7 @@ app.post('/api/generate/content', async (req, res) => {
     }
 
     // Check if Gemini API Key is valid
-    const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyAkjhVi57D95fNTT6PdLGKhE0S2eOZU7w0';
+    const apiKey = process.env.GEMINI_API_KEY || '';
     
     // Try Gemini AI first, fallback to mock if API key invalid
     try {
