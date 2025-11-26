@@ -115,10 +115,15 @@ components.forEach(component => {
 
 console.log('\n🌐 API INTEGRATION TESTS\n');
 
-runTest('Gemini API Key configured', () => {
-  // Test that environment variable is being used (not hardcoded)
+runTest('Gemini API Key format validation', () => {
+  // Test that if GEMINI_API_KEY is set, it has the correct format
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-  return !GEMINI_API_KEY || GEMINI_API_KEY.startsWith('AIza');
+  // Pass if either: key is not set (optional config), or key has correct format
+  if (!GEMINI_API_KEY) {
+    console.log('  ⚠️ GEMINI_API_KEY not configured (optional for dev mode)');
+    return true;
+  }
+  return GEMINI_API_KEY.startsWith('AIza') && GEMINI_API_KEY.length >= 30;
 });
 
 // ==================== BILLING TESTS ====================
